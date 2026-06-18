@@ -6,10 +6,12 @@ import { mockPosts, mockStores, mockCommunities, mockFiles, mockFeedbacks } from
 // ==========================================
 // MODALS
 // ==========================================
-export const LoginModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+export const LoginModal = ({ isOpen, onClose, onLogin }: { isOpen: boolean; onClose: () => void; onLogin?: (user: any) => void }) => {
   const [role, setRole] = useState('user');
   const [phone, setPhone] = useState('');
   const [step, setStep] = useState(1);
+  const [businessType, setBusinessType] = useState('store');
+  const [taxId, setTaxId] = useState('');
 
   if (!isOpen) return null;
 
@@ -29,7 +31,15 @@ export const LoginModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           <div className="space-y-4">
             <input type="text" placeholder="Nhập số điện thoại" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={phone} onChange={e => setPhone(e.target.value)} />
             
-            {role === 'business' && <input type="text" placeholder="Mã số thuế (Hệ thống tự động check)" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />}
+            {role === 'business' && (
+              <>
+                <input type="text" placeholder="Mã số thuế (Hệ thống tự động check)" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={taxId} onChange={e => setTaxId(e.target.value)} />
+                <select className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={businessType} onChange={e => setBusinessType(e.target.value)}>
+                  <option value="store">Chủ Cửa Hàng Vật Tư</option>
+                  <option value="technician">Kỹ Sư Sửa Chữa Chuyên Ngành</option>
+                </select>
+              </>
+            )}
             {role === 'coordinator' && (
               <label className="flex items-center space-x-2 text-sm text-gray-700 bg-blue-50 p-3 rounded-lg">
                 <input type="checkbox" className="w-4 h-4 text-blue-600" />
@@ -37,7 +47,10 @@ export const LoginModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
               </label>
             )}
 
-            <button onClick={() => setStep(2)} className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition">Tiếp tục</button>
+            <button onClick={() => {
+               if (!phone) return;
+               setStep(2);
+            }} className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition">Tiếp tục</button>
             
             <div className="relative flex items-center py-2">
               <div className="flex-grow border-t border-gray-300"></div>
@@ -61,7 +74,20 @@ export const LoginModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             <p className="text-lg font-medium text-gray-800">
               {role === 'business' ? "Hồ sơ Doanh nghiệp đang chờ duyệt Store." : "Đăng nhập thành công!"}
             </p>
-            <button onClick={onClose} className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition">Đóng</button>
+            <button onClick={() => {
+               if (onLogin) {
+                  onLogin({
+                    id: `u_${Date.now()}`,
+                    phone,
+                    role,
+                    businessType: role === 'business' ? businessType : undefined,
+                    name: role === 'business' ? (businessType === 'store' ? 'Cửa Hàng Mới' : 'Kỹ Sư Sửa Chữa') : 'Người Dùng Mới',
+                    taxId: role === 'business' ? taxId : undefined
+                  });
+               } else {
+                  onClose();
+               }
+            }} className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition">Vào hệ thống</button>
           </div>
         )}
       </div>

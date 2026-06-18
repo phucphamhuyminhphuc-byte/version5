@@ -5,9 +5,10 @@ import {
   MessageSquare, Bookmark, ChevronLeft, Folder, FileText, Image as ImageIcon, User as UserIcon
 } from 'lucide-react';
 import {
-  LoginModal, OcrSearchModal, HomeFeed, MapView, StoreProfile, AdminDashboard, UserSettings,
-  ToastContainer, UserProfile, ChatCenter, ServicesMarketplace, Avatar, safeGet, safeSet, showToast
+  LoginModal, OcrSearchModal, HomeFeed, MapView, StoreProfile, AdminDashboard,
+  ToastContainer, UserProfile, ChatCenter, Avatar
 } from '@/components/UIComponents';
+import { safeGet, safeSet, showToast } from '@/components/UIComponents';
 
 const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any, searchQuery: string }) => {
   // 1. STATE QUẢN LÝ ĐIỀU HƯỚNG MÀN HÌNH CHÍNH
@@ -18,8 +19,8 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<'user'|'business'|'coordinator'|'supervisor'|'admin'>('user');
-  // const [currentUser, setCurrentUser] = useState<any>(null);
-  // const [searchQuery, setSearchQuery] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [mounted, setMounted] = useState(false);
   
   // States for Community Corridor
@@ -42,10 +43,14 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
   const [commTab, setCommTab] = useState<'feed' | 'storage'>('feed');
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
 
+  const [usersData, setUsersData] = useState<any[]>([]);
+  const [expandedComments, setExpandedComments] = useState<any>({});
+
   useEffect(() => {
     const fetchData = () => {
       setCommunities(safeGet('bme_communities', []));
       setPosts(safeGet('bme_posts', []));
+      setUsersData(safeGet('bme_users', []));
     };
     fetchData();
     const int = setInterval(fetchData, 3000);
@@ -424,6 +429,55 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
                         )}
                       </div>
                     </div>
+
+                    <div className="px-5 py-3 flex items-center gap-6 border-t border-gray-100 bg-gray-50/50">
+                      <button 
+                        onClick={() => toggleSave(post.id)} 
+                        className={`flex items-center gap-2 text-sm font-semibold transition ${savedPostIds.includes(post.id) ? 'text-bme-primary' : 'text-gray-500 hover:text-gray-800'}`}
+                      >
+                        <Bookmark size={18} fill={savedPostIds.includes(post.id) ? 'currentColor' : 'none'} />
+                        {savedPostIds.includes(post.id) ? 'Đã lưu' : 'Lưu bài viết'}
+                      </button>
+                      <button 
+                        onClick={() => setExpandedComments((prev: any) => ({ ...prev, [post.id]: !prev[post.id] }))} 
+                        className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-800 transition"
+                      >
+                        <MessageSquare size={18} />
+                        {post.comments || 0} Bình luận
+                      </button>
+                    </div>
+
+                    {expandedComments[post.id] && (
+                      <div className="p-5 bg-white border-t border-gray-100">
+                        <div className="space-y-4 mb-4">
+                          {(!post.replies || post.replies.length === 0) ? (
+                            <p className="text-sm text-gray-500 italic text-center">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+                          ) : (
+                            post.replies.map((reply: any) => (
+                              <div key={reply.id} className="flex gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-bme-primary font-bold flex-shrink-0 text-sm">
+                                  {reply.author?.charAt(0) || 'U'}
+                                </div>
+                                <div className="flex-1 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                  <div className="flex justify-between items-start mb-1">
+                                    <p className="font-bold text-gray-800 text-sm">{reply.author} <span className="text-xs text-gray-500 font-normal ml-1">({reply.authorPhone ? reply.authorPhone.replace(/(\d{4})\d{3}(\d{3})/, '$1***$2') : '***'})</span></p>
+                                    <span className="text-[10px] text-gray-400">{reply.time}</span>
+                                  </div>
+                                  <p className="text-sm text-gray-700">{reply.text}</p>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        
+                        {currentUser && (
+                          <form onSubmit={e => { e.preventDefault(); const input = e.currentTarget.elements.namedItem(`comment-${post.id}`) as HTMLInputElement; if (input && input.value) { addComment(post.id, input.value); input.value = ''; } }} className="flex gap-2">
+                            <input name={`comment-${post.id}`} type="text" placeholder="Viết bình luận của bạn..." className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-bme-primary focus:bg-white transition" />
+                            <button type="submit" className="bg-bme-primary hover:bg-bme-secondary text-white px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-1 shadow-sm"><Send size={16} /> Gửi</button>
+                          </form>
+                        )}
+                      </div>
+                    )}
                   </article>
                 ))}
               </main>
@@ -631,7 +685,7 @@ export default function BmeStationeryApp() {
     { id: 'FEED', icon: <LayoutGrid size={20} />, label: 'Bảng tin', badge: null },
     { id: 'EMERGENCY', icon: <MapPin size={20} />, label: 'Khẩn cấp', badge: '🚨' },
     { id: 'MESSAGES', icon: <MessageSquare size={20} />, label: 'Tin nhắn', badge: unreadMsgCount > 0 ? unreadMsgCount : null },
-    { id: 'store', icon: <Store size={20} />, label: 'Gian hàng' },
+    { id: 'STORE', icon: <Store size={20} />, label: 'Gian hàng', badge: null },
     { id: 'SAVED_POSTS', icon: <Bookmark size={20} />, label: 'Mục đã lưu', badge: null },
     ...(userRole === 'admin' ? [{ id: 'ADMIN', icon: <Settings size={20} />, label: 'Quản trị Admin', badge: pendingCommCount > 0 ? pendingCommCount : null }] : []),
     ...(['supervisor', 'coordinator'].includes(userRole) ? [{ id: 'ADMIN', icon: <Settings size={20} />, label: 'Bảng điều khiển Giám sát', badge: pendingCommCount > 0 ? pendingCommCount : null }] : []),
@@ -923,7 +977,7 @@ export default function BmeStationeryApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
       {/* =============================================
           HEADER - NAVBAR (Phong cách Long Châu)
           ============================================= */}
