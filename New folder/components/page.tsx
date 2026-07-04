@@ -1319,7 +1319,7 @@ export default function BmeStationeryApp() {
                   case 'MESSAGES':
                     return <ChatCenter currentUser={currentUser} initialTarget={chatTarget} />;
                   case 'STORE': 
-                    return <StoreProfile currentUser={currentUser} searchQuery={searchQuery} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />;
+                    return <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />;
                   case 'MY_PROFILE': 
                     return viewingUserId ? <UserProfile userId={viewingUserId} currentUser={currentUser} /> : null;
                   case 'ADMIN': 

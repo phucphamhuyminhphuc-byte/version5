@@ -114,33 +114,47 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState({ linhKien: [] as any[], thietBi: [] as any[], files: [] as any[] });
 
-  const handleFileChange = (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isImg = ['jpg', 'jpeg', 'png', 'gif'].includes(ext);
-    const isPdf = ext === 'pdf';
-    const isDoc = ['doc', 'docx'].includes(ext);
-    
-    let path = '/storage/misc/';
-    let typeLabel = 'OTHER';
-    if (isImg) { path = '/storage/images/'; typeLabel = 'Image'; }
-    else if (isPdf) { path = '/storage/documents/pdf/'; typeLabel = 'PDF'; }
-    else if (isDoc) { path = '/storage/documents/docs/'; typeLabel = 'DOCX'; }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
 
-    if (!isImg && !isPdf && !isDoc) return showToast('Định dạng file không được hỗ trợ!', 'error');
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setPostAttachment({
-          id: `file_${Date.now()}`, name: file.name, size: file.size, ext, path, typeLabel,
-          base64: ev.target.result, timestamp: new Date().toLocaleString()
-        });
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = null;
+
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc ảnh không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc ảnh đã chọn.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setPostAttachment({
+        id: `file_${Date.now()}`,
+        name: file.name,
+        size: file.size,
+        ext: file.name.split('.').pop()?.toLowerCase() || 'img',
+        path: '/storage/images/',
+        typeLabel: 'Image',
+        base64: base64Image,
+        timestamp: new Date().toLocaleString()
+      });
+    } catch (error) {
+      console.error('Lỗi khi tải ảnh bài viết:', error);
+      showToast('Không thể xử lý ảnh. Vui lòng thử lại!', 'error');
+      setPostAttachment(null);
+    }
   };
 
   const createPost = () => {
@@ -361,7 +375,10 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
                       <textarea value={newPostText} onChange={e => setNewPostText(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-3 outline-none focus:border-bme-primary transition text-sm resize-none" rows={3} placeholder="Bạn muốn chia sẻ gì với cộng đồng này?" />
                       {postAttachment && (
                         <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in">
-                          <span className="truncate max-w-[80%] font-semibold text-bme-primary flex items-center gap-2">{postAttachment.typeLabel === 'Image' ? <ImageIcon size={18}/> : <FileText size={18}/>} {postAttachment.name}</span>
+                          <div className="flex items-center gap-3">
+                            <img src={postAttachment.base64} alt="Preview ảnh bài viết" className="h-16 w-16 object-cover rounded" />
+                            <span className="truncate max-w-[80%] font-semibold text-bme-primary">{postAttachment.name}</span>
+                          </div>
                           <button onClick={() => setPostAttachment(null)} className="text-red-500 hover:text-red-700 font-bold bg-white px-2 py-1 rounded shadow-sm">Xóa file</button>
                         </div>
                       )}
@@ -373,8 +390,7 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
                             <option value="Linh kiện">Linh kiện</option>
                             <option value="X-ray">X-ray</option>
                           </select>
-                          <input type="file" id="comm-feed-upload" className="hidden" accept=".jpg,.png,.pdf,.doc,.docx" onChange={handleFileChange} />
-                          <button onClick={() => document.getElementById('comm-feed-upload')?.click()} className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-bme-primary bg-gray-50 px-4 py-2 border border-gray-200 rounded-lg transition shadow-sm"><ImageIcon size={18}/> Đính kèm</button>
+                          <input type="file" accept="image/*" onChange={handleFileChange} className="p-2 border border-gray-200 rounded-lg text-sm bg-gray-50 outline-none focus:border-bme-primary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                         </div>
                         <button onClick={createPost} className="bg-bme-primary hover:bg-bme-secondary text-white px-6 py-2 rounded-lg font-bold shadow-md transition">Đăng bài</button>
                       </div>
@@ -1265,7 +1281,7 @@ export default function BmeStationeryApp() {
                   case 'MESSAGES':
                     return <ChatCenter currentUser={currentUser} initialTarget={chatTarget} />;
                   case 'STORE': 
-                    return <StoreProfile currentUser={currentUser} searchQuery={searchQuery} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />;
+                    return <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />;
                   case 'MY_PROFILE': 
                     return viewingUserId ? <UserProfile userId={viewingUserId} currentUser={currentUser} /> : null;
                   case 'ADMIN': 

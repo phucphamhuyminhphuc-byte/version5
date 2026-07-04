@@ -115,33 +115,47 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
     showToast(isApproved ? `Đã phê duyệt thành viên ${phone}` : `Đã từ chối thành viên ${phone}`, 'success');
   };
 
-  const handleFileChange = (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isImg = ['jpg', 'jpeg', 'png', 'gif'].includes(ext);
-    const isPdf = ext === 'pdf';
-    const isDoc = ['doc', 'docx'].includes(ext);
-    
-    let path = '/storage/misc/';
-    let typeLabel = 'OTHER';
-    if (isImg) { path = '/storage/images/'; typeLabel = 'Image'; }
-    else if (isPdf) { path = '/storage/documents/pdf/'; typeLabel = 'PDF'; }
-    else if (isDoc) { path = '/storage/documents/docs/'; typeLabel = 'DOCX'; }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
 
-    if (!isImg && !isPdf && !isDoc) return showToast('Định dạng file không được hỗ trợ!', 'error');
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setPostAttachment({
-          id: `file_${Date.now()}`, name: file.name, size: file.size, ext, path, typeLabel,
-          base64: ev.target.result, timestamp: new Date().toLocaleString()
-        });
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = null;
+
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc ảnh không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc ảnh đã chọn.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setPostAttachment({
+        id: `file_${Date.now()}`,
+        name: file.name,
+        size: file.size,
+        ext: file.name.split('.').pop()?.toLowerCase() || 'img',
+        path: '/storage/images/',
+        typeLabel: 'Image',
+        base64: base64Image,
+        timestamp: new Date().toLocaleString()
+      });
+    } catch (error) {
+      console.error('Lỗi khi tải ảnh bài viết:', error);
+      showToast('Không thể xử lý ảnh. Vui lòng thử lại!', 'error');
+      setPostAttachment(null);
+    }
   };
 
   const createPost = () => {
@@ -456,7 +470,10 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
                       <textarea value={newPostText} onChange={e => setNewPostText(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-3 outline-none focus:border-bme-primary transition text-sm resize-none" rows={3} placeholder="Bạn muốn chia sẻ gì với cộng đồng này?" />
                       {postAttachment && (
                         <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in">
-                          <span className="truncate max-w-[80%] font-semibold text-bme-primary flex items-center gap-2">{postAttachment.typeLabel === 'Image' ? <ImageIcon size={18}/> : <FileText size={18}/>} {postAttachment.name}</span>
+                          <div className="flex items-center gap-3">
+                            <img src={postAttachment.base64} alt="Preview ảnh bài viết" className="h-16 w-16 object-cover rounded" />
+                            <span className="truncate max-w-[80%] font-semibold text-bme-primary">{postAttachment.name}</span>
+                          </div>
                           <button onClick={() => setPostAttachment(null)} className="text-red-500 hover:text-red-700 font-bold bg-white px-2 py-1 rounded shadow-sm">Xóa file</button>
                         </div>
                       )}
@@ -468,8 +485,7 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
                             <option value="Linh kiện">Linh kiện</option>
                             <option value="X-ray">X-ray</option>
                           </select>
-                          <input type="file" id="comm-feed-upload" className="hidden" accept=".jpg,.png,.pdf,.doc,.docx" onChange={handleFileChange} />
-                          <button onClick={() => document.getElementById('comm-feed-upload')?.click()} className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-bme-primary bg-gray-50 px-4 py-2 border border-gray-200 rounded-lg transition shadow-sm"><ImageIcon size={18}/> Đính kèm</button>
+                          <input type="file" accept="image/*" onChange={handleFileChange} className="p-2 border border-gray-200 rounded-lg text-sm bg-gray-50 outline-none focus:border-bme-primary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                         </div>
                         <button onClick={createPost} className="bg-bme-primary hover:bg-bme-secondary text-white px-6 py-2 rounded-lg font-bold shadow-md transition">Đăng bài</button>
                       </div>
@@ -636,7 +652,7 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
 // ==========================================
 // COMPONENT: TRANG CHỦ (HOME DASHBOARD)
 // ==========================================
-const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab: (tab: string) => void; currentUser: any; userRole: string; }) => {
+const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole }: { setCurrentTab: (tab: string) => void; setViewingStoreId: (id: string | null) => void; currentUser: any; userRole: string; }) => {
   const defaultBannerItems = [
     {
       image: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2070&auto=format&fit=crop',
@@ -658,7 +674,8 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
   const [currentSlide, setCurrentSlide] = useState(0);
   const [bannerItems, setBannerItems] = useState<any[]>([]);
   const [showAddBannerForm, setShowAddBannerForm] = useState(false);
-  const [newBanner, setNewBanner] = useState({ title: '', desc: '', image: '' });
+  const [newBanner, setNewBanner] = useState({ title: '', desc: '' });
+  const [mediaBase64, setMediaBase64] = useState<string | null>(null);
   const [myDevices, setMyDevices] = useState<any[]>([]);
   const [deviceForm, setDeviceForm] = useState({ machineName: '', brand: '', purchaseDate: '' });
 
@@ -745,16 +762,54 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
     };
   };
 
-  const handleAddBanner = () => {
-    if (!newBanner.title || !newBanner.image) {
-       return showToast('Vui lòng nhập tiêu đề và link ảnh!', 'error');
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        setMediaBase64(null);
+        return;
+      }
+
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
+      }
+
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc file không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc file.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setMediaBase64(base64String);
+    } catch (error) {
+      console.error('Lỗi khi tải file banner:', error);
+      showToast('Không thể xử lý ảnh banner. Vui lòng thử lại!', 'error');
+      setMediaBase64(null);
     }
-    const newFeed = { id: Date.now(), ...newBanner };
+  };
+
+  const handleAddBanner = () => {
+     if (!newBanner.title || !mediaBase64) {
+       return showToast('Vui lòng nhập tiêu đề và tải ảnh banner!', 'error');
+    }
+    const newFeed = { id: Date.now(), title: newBanner.title, desc: newBanner.desc, image: mediaBase64 };
     const updatedFeeds = [newFeed, ...bannerItems];
     setBannerItems(updatedFeeds);
     safeSet('bme_global_medical_feeds', updatedFeeds);
     setShowAddBannerForm(false);
-    setNewBanner({ title: '', desc: '', image: '' });
+    setNewBanner({ title: '', desc: '' });
+    setMediaBase64(null);
     showToast('Đăng bản tin thành công!', 'success');
     setCurrentSlide(0);
   };
@@ -938,6 +993,7 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
     const [comms, setComms] = useState<any[]>([]);
     const [stores, setStores] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
+    const [activeAnalytics, setActiveAnalytics] = useState<string | null>(null);
 
     useEffect(() => {
       setUsers(safeGet('bme_users', []));
@@ -971,21 +1027,161 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
     const topSalesStoreId = Object.keys(salesCount).sort((a,b) => salesCount[b] - salesCount[a])[0];
     const topSalesStore = stores.find(s => s.id === topSalesStoreId);
 
+    const activeGroupsCount = comms.filter((c: any) => {
+      const status = String(c?.status || '').toUpperCase();
+      return status === 'APPROVED' || status === 'ACTIVE' || status === '';
+    }).length;
+    const pendingGroupsCount = comms.filter((c: any) => String(c?.status || '').toUpperCase() === 'PENDING_APPROVAL').length;
+    const rejectedGroupsCount = comms.filter((c: any) => String(c?.status || '').toUpperCase() === 'REJECTED').length;
+
+    const postCategoryMap = posts.reduce((acc: Record<string, number>, p: any) => {
+      const key = String(p?.category || 'Khác').trim() || 'Khác';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const postCategoryData = Object.keys(postCategoryMap)
+      .map((name) => ({ name, count: postCategoryMap[name] }))
+      .sort((a, b) => b.count - a.count);
+
+    const topGroupsData = [...comms]
+      .map((c: any) => ({
+        id: c?.id,
+        name: String(c?.name || 'Nhóm chưa đặt tên'),
+        members: Array.isArray(c?.members) ? c.members.length : Number(c?.membersCount || 0)
+      }))
+      .sort((a, b) => b.members - a.members)
+      .slice(0, 5);
+
+    const merchantActiveCount = users.filter((u: any) => String(u?.role || '').toUpperCase() === 'BUSINESS' && String(u?.businessType || '').toUpperCase() === 'MERCHANT' && String(u?.status || '').toLowerCase() === 'active').length;
+    const engineerActiveCount = users.filter((u: any) => String(u?.role || '').toUpperCase() === 'BUSINESS' && ['ENGINEER', 'TECHNICIAN'].includes(String(u?.businessType || '').toUpperCase()) && String(u?.status || '').toLowerCase() === 'active').length;
+    const totalBusinessActive = merchantActiveCount + engineerActiveCount;
+
     return (
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6 space-y-6">
         <h3 className="text-xl font-bold text-indigo-600 mb-4 flex items-center gap-2"><Shield size={24}/> Giám Sát Hệ Thống Tối Cao</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm">
-             <h4 className="font-bold text-indigo-800 mb-3 border-b border-indigo-200 pb-2">📊 Thống Kê Thông Minh</h4>
-             <ul className="text-sm space-y-3 text-indigo-900">
-               <li className="flex justify-between border-b border-indigo-100 pb-1"><span>👥 Nhóm đông TV nhất:</span> <strong>{largestComm?.name || 'N/A'} ({largestComm?.members?.length||0} TV)</strong></li>
-               <li className="flex justify-between border-b border-indigo-100 pb-1"><span>📝 Nhóm hoạt động mạnh:</span> <strong>{mostActiveComm?.name || 'N/A'}</strong></li>
-               <li className="flex justify-between border-b border-indigo-100 pb-1"><span>⭐ Đối tác đánh giá cao:</span> <strong>{topStore?.name || 'N/A'} ({topStore?.rating||0} Sao)</strong></li>
-               <li className="flex justify-between"><span>🏆 Cửa hàng/Kỹ sư Top Sale:</span> <strong>{topSalesStore?.name || 'N/A'} ({salesCount[topSalesStoreId]||0} Đơn)</strong></li>
-             </ul>
-           </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div
+            onClick={() => setActiveAnalytics('GROUPS')}
+            className={`bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'GROUPS' ? 'ring-2 ring-blue-500' : ''}`}
+          >
+            <h4 className="font-bold text-indigo-800 text-sm uppercase">Nhóm cộng đồng</h4>
+            <p className="text-3xl font-black text-indigo-700 mt-2">{activeGroupsCount}</p>
+            <p className="text-xs text-indigo-600 mt-1">Chờ duyệt: {pendingGroupsCount} • Từ chối: {rejectedGroupsCount}</p>
+          </div>
+          <div
+            onClick={() => setActiveAnalytics('POSTS')}
+            className={`bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'POSTS' ? 'ring-2 ring-blue-500' : ''}`}
+          >
+            <h4 className="font-bold text-blue-800 text-sm uppercase">Tần suất bài đăng</h4>
+            <p className="text-3xl font-black text-blue-700 mt-2">{posts.length}</p>
+            <p className="text-xs text-blue-600 mt-1">{postCategoryData.length} danh mục đang hoạt động</p>
+          </div>
+          <div
+            onClick={() => setActiveAnalytics('TOP_GROUPS')}
+            className={`bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'TOP_GROUPS' ? 'ring-2 ring-blue-500' : ''}`}
+          >
+            <h4 className="font-bold text-amber-800 text-sm uppercase">Top nhóm nổi bật</h4>
+            <p className="text-lg font-black text-amber-700 mt-2 truncate">{largestComm?.name || 'N/A'}</p>
+            <p className="text-xs text-amber-600 mt-1">{largestComm?.members?.length || 0} thành viên</p>
+          </div>
+          <div
+            onClick={() => setActiveAnalytics('BUSINESS')}
+            className={`bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'BUSINESS' ? 'ring-2 ring-blue-500' : ''}`}
+          >
+            <h4 className="font-bold text-emerald-800 text-sm uppercase">Business hoạt động</h4>
+            <p className="text-3xl font-black text-emerald-700 mt-2">{totalBusinessActive}</p>
+            <p className="text-xs text-emerald-600 mt-1">Merchant: {merchantActiveCount} • Engineer: {engineerActiveCount}</p>
+          </div>
         </div>
+
+        {activeAnalytics !== null && (
+          <div className="bg-white p-6 rounded-xl shadow-inner mt-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-5">
+              <h4 className="font-bold text-gray-800 text-lg">Bảng phân tích chi tiết</h4>
+              <button onClick={() => setActiveAnalytics(null)} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold">Đóng phân tích</button>
+            </div>
+
+            {activeAnalytics === 'GROUPS' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">So sánh số lượng nhóm theo trạng thái vận hành.</p>
+                {[
+                  { label: 'Đang hoạt động', value: activeGroupsCount, color: 'bg-green-500' },
+                  { label: 'Chờ duyệt', value: pendingGroupsCount, color: 'bg-yellow-500' },
+                  { label: 'Bị từ chối', value: rejectedGroupsCount, color: 'bg-red-500' }
+                ].map((item) => {
+                  const total = Math.max(activeGroupsCount + pendingGroupsCount + rejectedGroupsCount, 1);
+                  const width = Math.round((item.value / total) * 100);
+                  return (
+                    <div key={item.label}>
+                      <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.label}</span><span className="font-bold text-gray-800">{item.value}</span></div>
+                      <div className="h-3 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${item.color}`} style={{ width: `${width}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeAnalytics === 'POSTS' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">Phân tích tổng số bài đăng theo từng danh mục.</p>
+                {postCategoryData.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có dữ liệu bài đăng.</p>
+                ) : (
+                  postCategoryData.map((item) => {
+                    const maxCount = Math.max(...postCategoryData.map((d) => d.count), 1);
+                    const width = Math.round((item.count / maxCount) * 100);
+                    return (
+                      <div key={item.name}>
+                        <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.name}</span><span className="font-bold text-gray-800">{item.count}</span></div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${width}%` }} /></div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {activeAnalytics === 'TOP_GROUPS' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">Xếp hạng 5 nhóm có số lượng thành viên cao nhất.</p>
+                {topGroupsData.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có dữ liệu cộng đồng.</p>
+                ) : (
+                  topGroupsData.map((item, idx) => {
+                    const maxMembers = Math.max(...topGroupsData.map((d) => d.members), 1);
+                    const width = Math.round((item.members / maxMembers) * 100);
+                    return (
+                      <div key={item.id || item.name}>
+                        <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">#{idx + 1} {item.name}</span><span className="font-bold text-gray-800">{item.members} TV</span></div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${width}%` }} /></div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {activeAnalytics === 'BUSINESS' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">Tỷ trọng giữa Merchant và Engineer đang hoạt động.</p>
+                {[
+                  { label: 'MERCHANT', value: merchantActiveCount, color: 'bg-emerald-500' },
+                  { label: 'ENGINEER', value: engineerActiveCount, color: 'bg-cyan-500' }
+                ].map((item) => {
+                  const total = Math.max(totalBusinessActive, 1);
+                  const percent = Math.round((item.value / total) * 100);
+                  return (
+                    <div key={item.label}>
+                      <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.label}</span><span className="font-bold text-gray-800">{item.value} ({percent}%)</span></div>
+                      <div className="h-3 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${item.color}`} style={{ width: `${percent}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
            <h4 className="font-bold text-gray-800 mb-3 border-b pb-2 flex items-center gap-2"><Settings size={20}/> Công Cụ Kiểm Tra Chéo Toàn Sàn</h4>
@@ -1062,6 +1258,9 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
   const normalizePhone = (value: any) => String(value || '').replace(/\D/g, '');
   const normalizedPhone = normalizePhone(currentUser?.phone);
   const roleNorm = String(userRole || currentUser?.role || '').toLowerCase();
+  const isAdminRole = roleNorm === 'admin';
+  const isSupervisorRole = roleNorm === 'supervisor';
+  const isIsolatedRole = isAdminRole || isSupervisorRole;
   const isCoordinatorAccount = normalizedPhone === '0977777777' || normalizedPhone === '84977777777' || roleNorm === 'coordinator';
   const canPostBanner = currentUser && (normalizedPhone === '0123456789' || isCoordinatorAccount || ['admin', 'coordinator'].includes(roleNorm));
   const roleUpper = String(currentUser?.role || '').toUpperCase();
@@ -1069,6 +1268,33 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
   const businessTypeUpper = businessTypeUpperRaw === 'TECHNICIAN' ? 'ENGINEER' : businessTypeUpperRaw;
   const isStrictMerchant = roleUpper === 'BUSINESS' && businessTypeUpper === 'MERCHANT';
   const isStrictEngineer = roleUpper === 'BUSINESS' && businessTypeUpper === 'ENGINEER';
+
+  if (isIsolatedRole) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-800">{isAdminRole ? 'Bảng điều khiển Admin' : 'Thanh tra Hệ thống'}</h2>
+          <p className="text-gray-600 mt-1">Giao diện đã được cách ly, chỉ hiển thị dashboard quản trị và hồ sơ bảo mật.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => setCurrentTab(isAdminRole ? 'ADMIN_DASHBOARD' : 'SUPERVISOR_DASHBOARD')}
+            className="text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-bme-primary hover:shadow-md transition"
+          >
+            <p className="text-lg font-bold text-gray-800">{isAdminRole ? 'Bảng điều khiển Admin' : 'Thanh tra Hệ thống'}</p>
+            <p className="text-sm text-gray-600 mt-2">{isAdminRole ? 'Quản lý vận hành, tin nhắn và cấp lại mật khẩu.' : 'Thanh tra hệ thống, kiểm soát và xử lý vi phạm.'}</p>
+          </button>
+          <button
+            onClick={() => setCurrentTab('PROFILE')}
+            className="text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-bme-primary hover:shadow-md transition"
+          >
+            <p className="text-lg font-bold text-gray-800">Hồ sơ bảo mật</p>
+            <p className="text-sm text-gray-600 mt-2">Trang thông tin tài khoản quản trị và bảo mật cá nhân.</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -1086,10 +1312,15 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
             <h3 className="font-bold text-gray-800 mb-3 text-lg">Tạo bản tin lướt ngang</h3>
             <input type="text" placeholder="Tiêu đề bản tin..." className="w-full p-2 border border-gray-300 rounded mb-3 outline-none focus:border-bme-primary" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} />
             <input type="text" placeholder="Mô tả ngắn..." className="w-full p-2 border border-gray-300 rounded mb-3 outline-none focus:border-bme-primary" value={newBanner.desc} onChange={e => setNewBanner({...newBanner, desc: e.target.value})} />
-            <input type="text" placeholder="Link ảnh/video (URL)..." className="w-full p-2 border border-gray-300 rounded mb-4 outline-none focus:border-bme-primary" value={newBanner.image} onChange={e => setNewBanner({...newBanner, image: e.target.value})} />
+            <input type="file" accept="image/*" className="w-full p-2 border border-gray-300 rounded mb-4 outline-none focus:border-bme-primary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" onChange={handleFileUpload} />
+            {mediaBase64 && (
+              <div className="mb-4 border border-gray-200 rounded p-2 bg-gray-50">
+                <img src={mediaBase64} alt="Preview banner" className="h-16 w-16 object-cover rounded" />
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={handleAddBanner} className="bg-green-600 hover:bg-green-700 transition text-white px-6 py-2 rounded font-bold">Đăng lên Banner</button>
-              <button onClick={() => setShowAddBannerForm(false)} className="bg-gray-200 hover:bg-gray-300 transition text-gray-700 px-6 py-2 rounded font-bold">Hủy</button>
+              <button onClick={() => { setShowAddBannerForm(false); setMediaBase64(null); }} className="bg-gray-200 hover:bg-gray-300 transition text-gray-700 px-6 py-2 rounded font-bold">Hủy</button>
             </div>
           </div>
         )}
@@ -1127,7 +1358,7 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
           <p className="mt-1 opacity-80">Khám phá bài viết, thảo luận và chia sẻ tài liệu chuyên môn.</p>
         </div>
       {!isCoordinatorAccount && (
-          <div onClick={() => setCurrentTab('MARKET')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-gray-200 group">
+          <div onClick={() => { setViewingStoreId(null); setCurrentTab('MARKET'); }} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-gray-200 group">
             <ShoppingCart size={40} className="mb-3 text-bme-primary group-hover:scale-110 transition-transform" />
             <h3 className="text-2xl font-bold uppercase">CHỢ THIẾT BỊ Y TẾ</h3>
             <p className="mt-1 text-gray-600">Mua sắm thiết bị & linh kiện y tế từ các nhà cung cấp.</p>
@@ -1143,7 +1374,7 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
           <h3 className="text-2xl font-bold">Tin nhắn</h3>
           <p className="mt-1 text-gray-600">Trao đổi trực tiếp với đối tác.</p>
         </div>
-      {!isCoordinatorAccount && (
+      {!isCoordinatorAccount && !isStrictMerchant && (
         <div onClick={() => setCurrentTab('SERVICES')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-gray-200 group">
           <Wrench size={40} className="mb-3 text-orange-500 group-hover:scale-110 transition-transform" />
           <h3 className="text-2xl font-bold uppercase">DỊCH VỤ SỬA CHỮA</h3>
@@ -1151,7 +1382,7 @@ const HomeDashboard = ({ setCurrentTab, currentUser, userRole }: { setCurrentTab
         </div>
       )}
       {isStrictMerchant && (
-        <div onClick={() => setCurrentTab('MERCHANT_PRIVATE_STORE')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-blue-200 group">
+        <div onClick={() => { setViewingStoreId(null); setCurrentTab('MERCHANT_PRIVATE_STORE'); }} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-blue-200 group">
           <Store size={40} className="mb-3 text-blue-600 group-hover:scale-110 transition-transform" />
           <h3 className="text-2xl font-bold uppercase">QUẢN LÝ GIAN HÀNG RIÊNG</h3>
           <p className="mt-1 text-gray-600">Khu vực độc quyền Merchant để quản lý kho và đơn hàng.</p>
@@ -1281,6 +1512,13 @@ export default function BmeStationeryApp() {
   // State phục vụ tìm kiếm thông minh
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState({ linhKien: [] as any[], thietBi: [] as any[], files: [] as any[] });
+
+  const getDefaultTabByRole = (user: any) => {
+    const role = String(user?.role || '').toUpperCase();
+    if (role === 'ADMIN') return 'ADMIN_DASHBOARD';
+    if (role === 'SUPERVISOR') return 'SUPERVISOR_DASHBOARD';
+    return 'FEED';
+  };
 
   // 4. STATE CHO CHỢ THIẾT BỊ (MARKET) TÍCH HỢP TRỰC TIẾP ĐỂ TRÁNH LỖI UNDEFINED COMPONENT
   const [marketSearch, setMarketSearch] = useState('');
@@ -1469,6 +1707,24 @@ export default function BmeStationeryApp() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    const roleNorm = String(userRole || currentUser?.role || '').toLowerCase();
+    if (roleNorm === 'admin') {
+      const allowedAdminTabs = ['ADMIN_DASHBOARD', 'PROFILE', 'MY_PROFILE'];
+      if (!allowedAdminTabs.includes(currentTab)) {
+        setCurrentTab('ADMIN_DASHBOARD');
+      }
+      return;
+    }
+    if (roleNorm === 'supervisor') {
+      const allowedSupervisorTabs = ['SUPERVISOR_DASHBOARD', 'PROFILE', 'MY_PROFILE'];
+      if (!allowedSupervisorTabs.includes(currentTab)) {
+        setCurrentTab('SUPERVISOR_DASHBOARD');
+      }
+    }
+  }, [isLoggedIn, currentUser, userRole, currentTab]);
 
 
   const handleLogout = () => {
@@ -1781,7 +2037,7 @@ export default function BmeStationeryApp() {
               </div>
 
               {/* NÚT QUAY LẠI THÔNG MINH */}
-              {currentTab !== 'HOME' ? (
+              {currentTab !== 'HOME' && !['ADMIN_DASHBOARD', 'SUPERVISOR_DASHBOARD'].includes(currentTab) ? (
                 <button
                   onClick={() => {
                     if (currentTab === 'STORE' || currentTab === 'MARKET') {
@@ -2028,6 +2284,8 @@ export default function BmeStationeryApp() {
             {currentTab !== 'HOME' && ( // Ẩn tiêu đề ở trang chủ để banner nổi bật hơn
             <div className="mb-6 animate-slide-in-down max-w-6xl mx-auto p-4 lg:p-6">
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-800">
+                {currentTab === 'ADMIN_DASHBOARD' && '🛡️ Bảng điều khiển Admin'}
+                {currentTab === 'SUPERVISOR_DASHBOARD' && '🧭 Thanh tra Hệ thống'}
                 {currentTab === 'FEED' && '📋 CỘNG ĐỒNG Y SINH'}
                 {currentTab === 'MARKET' && '🛒 Chợ thiết bị y tế'}
                 {currentTab === 'SERVICES' && '🛠️ Dịch vụ sửa chữa chuyên gia'}
@@ -2043,6 +2301,8 @@ export default function BmeStationeryApp() {
                 {currentTab === 'SETTINGS' && '⚙️ Cài đặt tài khoản'}
               </h1>
               <p className="text-gray-600 mt-1">
+                {currentTab === 'ADMIN_DASHBOARD' && 'Khu vực điều hành quản trị, tin nhắn hệ thống và cấp lại mật khẩu.'}
+                {currentTab === 'SUPERVISOR_DASHBOARD' && 'Khu vực thanh tra hệ thống, kiểm tra và xử lý vi phạm.'}
                 {currentTab === 'FEED' && 'Khám phá bài viết mới, tin tức y sinh và cơ hội kinh doanh'}
                 {currentTab === 'MARKET' && 'Tìm kiếm, so sánh và mua sắm các sản phẩm y tế'}
                 {currentTab === 'SERVICES' && 'Duyệt các gói dịch vụ sửa chữa từ các kỹ sư chuyên nghiệp'}
@@ -2070,64 +2330,47 @@ export default function BmeStationeryApp() {
                 const isCoordinatorAccount = normalizedCurrentPhone === '0977777777' || normalizedCurrentPhone === '84977777777' || roleNorm === 'coordinator';
                 switch(currentTab) {
                   case 'HOME':
-                    return <HomeDashboard setCurrentTab={setCurrentTab} currentUser={currentUser} userRole={userRole} />;
+                    return <HomeDashboard setCurrentTab={setCurrentTab} setViewingStoreId={setViewingStoreId} currentUser={currentUser} userRole={userRole} />;
+                  case 'ADMIN_DASHBOARD':
+                    if (roleNorm === 'admin') {
+                      return <div className="max-w-6xl mx-auto p-4 lg:p-6"><AdminDashboard currentUser={currentUser} /></div>;
+                    }
+                    return (
+                      <div className="max-w-6xl mx-auto p-4 lg:p-6"><div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 text-center">
+                        <p className="text-yellow-800 font-semibold text-lg">⚠️ Truy cập bị từ chối</p>
+                        <p className="text-yellow-700 mt-2">Mục này chỉ dành cho ADMIN.</p>
+                      </div></div>
+                    );
+                  case 'SUPERVISOR_DASHBOARD':
+                    if (roleNorm === 'supervisor') {
+                      return <div className="max-w-6xl mx-auto p-4 lg:p-6"><AdminDashboard currentUser={currentUser} /></div>;
+                    }
+                    return (
+                      <div className="max-w-6xl mx-auto p-4 lg:p-6"><div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 text-center">
+                        <p className="text-yellow-800 font-semibold text-lg">⚠️ Truy cập bị từ chối</p>
+                        <p className="text-yellow-700 mt-2">Mục này chỉ dành cho SUPERVISOR.</p>
+                      </div></div>
+                    );
                   case 'FEED': 
                     return <div className="max-w-6xl mx-auto p-4 lg:p-6"><CommunityFeedCorridor currentUser={currentUser} searchQuery={searchQuery} /></div>;
                   case 'MARKET':
-                  case 'STORE': {
-                    const stores = safeGet('bme_stores', []);
-                    const normalizedRole = String(currentUser?.role || '').toLowerCase();
-                    const rawBusinessType = String(currentUser?.businessType || '').toLowerCase();
-                    const normalizedBusinessType = rawBusinessType === 'technician' ? 'engineer' : rawBusinessType;
-                    const isStrictMerchant = String(currentUser?.role || '').toUpperCase() === 'BUSINESS' && String(currentUser?.businessType || '').toUpperCase() === 'MERCHANT';
-                    const isStrictEngineer = String(currentUser?.role || '').toUpperCase() === 'BUSINESS' && (String(currentUser?.businessType || '').toUpperCase() === 'ENGINEER' || String(currentUser?.businessType || '').toUpperCase() === 'TECHNICIAN');
-                    const isGuest = !currentUser;
-                    const isBuyer = !!currentUser && normalizedRole === 'user';
-                    const isMerchant = isStrictMerchant || (normalizedRole === 'business' && normalizedBusinessType === 'merchant');
-                    const currentStore = stores?.find((s: any) => s?.ownerPhone === currentUser?.phone);
-
-                    // MARKET phải đồng nhất cho khách vãng lai và tài khoản người mua.
-                    if (currentTab === 'MARKET' && (isGuest || isBuyer)) {
-                      return (
-                        <div className="max-w-6xl mx-auto p-4 lg:p-6">
-                          <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />
-                        </div>
-                      );
-                    }
-
-                    if (isMerchant && currentStore?.id) {
-                      return (
-                        <div className="max-w-6xl mx-auto p-4 lg:p-6">
-                          <StoreProfile currentUser={currentUser} viewingStoreId={currentStore.id} setViewingStoreId={setViewingStoreId} />
-                        </div>
-                      );
-                    }
-
-                    if (currentTab === 'STORE' && isStrictEngineer && !viewingStoreId) {
-                      return (
-                        <div className="max-w-6xl mx-auto p-4 lg:p-6">
-                          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 text-center">
-                            <p className="text-yellow-800 font-semibold text-lg">⚠️ Truy cập bị từ chối</p>
-                            <p className="text-yellow-700 mt-2">Mục Quản lý gian hàng riêng chỉ dành cho Business Merchant.</p>
-                          </div>
-                        </div>
-                      );
-                    }
-
                     return (
                       <div className="max-w-6xl mx-auto p-4 lg:p-6">
-                        <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} />
+                        <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} mode="PUBLIC_MARKET" />
                       </div>
                     );
-                  }
+                  case 'STORE':
+                    return (
+                      <div className="max-w-6xl mx-auto p-4 lg:p-6">
+                        <StoreProfile currentUser={currentUser} viewingStoreId={viewingStoreId} setViewingStoreId={setViewingStoreId} mode="PUBLIC_MARKET" />
+                      </div>
+                    );
               case 'MERCHANT_PRIVATE_STORE': {
                 const strictMerchant = String(currentUser?.role || '').toUpperCase() === 'BUSINESS' && String(currentUser?.businessType || '').toUpperCase() === 'MERCHANT';
                 if (!strictMerchant) {
                   return <div className="max-w-6xl mx-auto p-4 lg:p-6"><div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 text-center"><p className="text-yellow-800 font-semibold text-lg">⚠️ Truy cập bị từ chối</p><p className="text-yellow-700 mt-2">Mục Quản lý gian hàng riêng chỉ dành cho BUSINESS MERCHANT.</p></div></div>;
                 }
-                const stores = safeGet('bme_stores', []);
-                const currentStore = stores?.find((s: any) => s?.ownerPhone === currentUser?.phone);
-                return <div className="max-w-6xl mx-auto p-4 lg:p-6"><StoreProfile currentUser={currentUser} viewingStoreId={currentStore?.id || null} setViewingStoreId={setViewingStoreId} /></div>;
+                return <div className="max-w-6xl mx-auto p-4 lg:p-6"><StoreProfile currentUser={currentUser} viewingStoreId={null} setViewingStoreId={setViewingStoreId} mode="MERCHANT_DASHBOARD" /></div>;
               }
               case 'SERVICES': {
                 const isStrictMerchant = String(currentUser?.role || '').toUpperCase() === 'BUSINESS' && String(currentUser?.businessType || '').toUpperCase() === 'MERCHANT';
@@ -2192,6 +2435,7 @@ export default function BmeStationeryApp() {
           setIsLoggedIn(true);
           setUserRole(normalizeRoleForState(user.role || 'user'));
           setCurrentUser(user);
+          setCurrentTab(getDefaultTabByRole(user));
           try { localStorage.setItem('bme_current_user', JSON.stringify(user)); } catch (e) {}
         }}
       />

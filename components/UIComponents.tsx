@@ -7,7 +7,7 @@ import {
   Settings, ChevronDown, ShoppingCart, ShoppingBag, FolderOpen, PlusCircle, CheckCircle,
   Shield, Eye, Lock, MessageSquare, Send, Upload, Database, Folder, Trash2,
   AlertTriangle, Image as ImageIcon, BarChart, TrendingUp, Server, Tag, Wrench, Filter,
-  ArrowLeft
+  ArrowLeft, Bell
 } from 'lucide-react';
 
 // LocalStorage helpers
@@ -342,40 +342,47 @@ export const HomeFeed = ({ searchQuery = '', currentUser = null, savedOnly = fal
     return () => clearInterval(interval);
   }, []);
 
-  const handleFileChange = (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop().toLowerCase();
-    const isImg = ['jpg', 'jpeg', 'png', 'gif'].includes(ext);
-    const isPdf = ext === 'pdf';
-    const isDoc = ['doc', 'docx'].includes(ext);
-    
-    let path = '/storage/misc/';
-    let typeLabel = 'OTHER';
-    if (isImg) { path = '/storage/images/'; typeLabel = 'Image'; }
-    else if (isPdf) { path = '/storage/documents/pdf/'; typeLabel = 'PDF'; }
-    else if (isDoc) { path = '/storage/documents/docs/'; typeLabel = 'DOCX'; }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
 
-    if (!isImg && !isPdf && !isDoc) {
-      return showToast('Định dạng file không được hỗ trợ!', 'error');
-    }
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
+      }
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc ảnh không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc ảnh đã chọn.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
       setAttachment({
         id: `file_${Date.now()}`,
         name: file.name,
         size: file.size,
-        ext,
-        path,
-        typeLabel,
-        base64: ev.target.result,
+        ext: file.name.split('.').pop()?.toLowerCase() || 'img',
+        path: '/storage/images/',
+        typeLabel: 'Image',
+        base64: base64Image,
         timestamp: new Date().toLocaleString()
       });
-    };
-    reader.readAsDataURL(file);
-    // Clear input
-    e.target.value = null;
+    } catch (error) {
+      console.error('Lỗi khi tải ảnh bài viết:', error);
+      showToast('Không thể xử lý ảnh. Vui lòng thử lại!', 'error');
+      setAttachment(null);
+    }
   };
 
   const createPost = async () => {
@@ -469,13 +476,18 @@ export const HomeFeed = ({ searchQuery = '', currentUser = null, savedOnly = fal
                     <option>Linh kiện</option>
                     <option>X-ray</option>
                   </select>
-                  <input type="file" id="feed-upload" className="hidden" accept=".jpg,.png,.pdf,.doc,.docx" onChange={handleFileChange} />
-                  <button onClick={() => document.getElementById('feed-upload')?.click()} className="flex items-center gap-1 text-sm hover:text-blue-600 bg-gray-50 px-3 py-2 border rounded transition"><ImageIcon size={16}/> Đính kèm File</button>
+                  <input type="file" accept="image/*" onChange={handleFileChange} className="p-2 border rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                 </div>
                 <button onClick={createPost} className="bg-bme-primary text-white px-4 py-2 rounded">Đăng bài</button>
               </div>
               {attachment && (
-                <div className="mt-3 p-2 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in"><span className="truncate max-w-[80%] font-semibold text-bme-primary flex items-center gap-2">{attachment.typeLabel === 'Image' ? <ImageIcon size={16}/> : <FileText size={16}/>} {attachment.name} ({attachment.typeLabel})</span><button onClick={() => setAttachment(null)} className="text-red-500 hover:text-red-700 font-bold bg-white px-2 py-0.5 rounded">Xóa</button></div>
+                <div className="mt-3 p-2 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    <img src={attachment.base64} alt="Preview ảnh bài viết" className="h-16 w-16 object-cover rounded" />
+                    <span className="truncate max-w-[80%] font-semibold text-bme-primary">{attachment.name}</span>
+                  </div>
+                  <button onClick={() => setAttachment(null)} className="text-red-500 hover:text-red-700 font-bold bg-white px-2 py-0.5 rounded">Xóa</button>
+                </div>
               )}
             </div>
           </div>
@@ -691,6 +703,49 @@ export const TinyCommunity = ({ currentUser, searchQuery = '' }: { currentUser?:
     e.target.value = null;
   };
 
+  const handleCommunityPostImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
+      }
+
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc ảnh không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc ảnh đã chọn.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setPostAttachment({
+        id: `file_${Date.now()}`,
+        name: file.name,
+        size: file.size,
+        ext: file.name.split('.').pop()?.toLowerCase() || 'img',
+        path: '/storage/images/',
+        typeLabel: 'Image',
+        base64: base64Image,
+        timestamp: new Date().toLocaleString()
+      });
+    } catch (error) {
+      console.error('Lỗi khi tải ảnh bài viết nhóm:', error);
+      showToast('Không thể xử lý ảnh. Vui lòng thử lại!', 'error');
+      setPostAttachment(null);
+    }
+  };
+
   const handlePost = () => {
     if(!newPostText.trim() && !postAttachment) return showToast('Vui lòng nhập nội dung hoặc đính kèm', 'error');
     if(!active) return;
@@ -901,9 +956,9 @@ export const TinyCommunity = ({ currentUser, searchQuery = '' }: { currentUser?:
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-bme-primary flex-shrink-0 font-bold">{currentUser?.name?.charAt(0) || 'U'}</div>
                       <div className="flex-1">
                         <textarea value={newPostText} onChange={e=>setNewPostText(e.target.value)} placeholder="Viết câu hỏi hoặc chia sẻ kỹ thuật vào nhóm..." rows={2} className="w-full p-3 bg-gray-50 border border-gray-200 focus:bg-white focus:border-bme-primary rounded-lg outline-none resize-none text-sm transition" />
-                        {postAttachment && <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in"><span className="truncate max-w-[80%] font-semibold text-bme-primary flex items-center gap-2">{postAttachment.typeLabel === 'Image' ? <ImageIcon size={16}/> : <FileText size={16}/>} {postAttachment.name}</span><button onClick={() => setPostAttachment(null)} className="text-red-500 font-bold">Xóa</button></div>}
+                        {postAttachment && <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center text-sm shadow-sm animate-fade-in"><div className="flex items-center gap-3"><img src={postAttachment.base64} alt="Preview ảnh nhóm" className="h-16 w-16 object-cover rounded" /><span className="truncate max-w-[80%] font-semibold text-bme-primary">{postAttachment.name}</span></div><button onClick={() => setPostAttachment(null)} className="text-red-500 font-bold">Xóa</button></div>}
                         <div className="flex justify-between items-center mt-2">
-                          <div><input type="file" id="group-post-file" className="hidden" accept=".jpg,.png,.pdf,.doc,.docx" onChange={e => handleFileChange(e, setPostAttachment)} /><button onClick={()=>document.getElementById('group-post-file')?.click()} className="text-sm font-semibold text-gray-500 hover:text-bme-primary flex items-center gap-1"><ImageIcon size={16}/> Đính kèm</button></div>
+                          <div><input type="file" accept="image/*" onChange={handleCommunityPostImageChange} className="p-2 border rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" /></div>
                           <button onClick={handlePost} className="bg-bme-primary hover:bg-bme-secondary text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition">Đăng bài</button>
                         </div>
                       </div>
@@ -1021,520 +1076,503 @@ export const TinyCommunity = ({ currentUser, searchQuery = '' }: { currentUser?:
   );
 };
 
-// ------------------ StoreProfile ------------------
-export const StoreProfile = ({ currentUser, viewingStoreId, setViewingStoreId }: { currentUser: any, viewingStoreId: string | null, setViewingStoreId: (id: string | null) => void }) => {
-  const [stores, setStores] = useState(()=> safeGet('bme_stores', []));
-  const [products, setProducts] = useState(()=> safeGet('bme_products', safeGet('products', [])));
-  const [orders, setOrders] = useState(()=> safeGet('bme_orders', safeGet('orders', [])));
-  const myStore = stores.find((s: any) => s?.ownerPhone === currentUser?.phone);
-  const roleLower = String(currentUser?.role || '').toLowerCase();
-  const businessTypeRaw = String(currentUser?.businessType || '').toLowerCase();
-  const normalizedBusinessType = businessTypeRaw === 'technician' ? 'engineer' : businessTypeRaw;
-  const isStrictMerchant = String(currentUser?.role || '').toUpperCase() === 'BUSINESS' && String(currentUser?.businessType || '').toUpperCase() === 'MERCHANT';
-  const isNormalizedMerchant = roleLower === 'business' && (normalizedBusinessType === 'merchant' || (!businessTypeRaw && !!myStore?.id));
-  const hasMerchantPermission = isStrictMerchant || isNormalizedMerchant;
+// ====================================================
+// PRODUCT DETAIL MODAL (Shopee-style with qty select)
+// ====================================================
+const ProductDetailModal = ({ product, store, currentUser, onClose }: { product: any, store: any, currentUser: any, onClose: () => void }) => {
+  const [qty, setQty] = useState(1);
+  const stock = Number(product?.stock ?? 0);
+  const isOutOfStock = stock === 0;
 
-  // State cho Chợ tổng
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = useState('default');
-  
-  // State cho trang quản lý của chủ shop
-  const [storeTab, setStoreTab] = useState('stats'); // 'stats' | 'products' | 'orders'
-  const [newProdForm, setNewProdForm] = useState({ name: '', price: '', stock: '10', image: '', description: '' });
-  const [showSmartReport, setShowSmartReport] = useState(false);
-  const [newStoreForm, setNewStoreForm] = useState({ name: '', description: '', address: '', phone: '' });
+  const handleAddToCart = () => {
+    if (isOutOfStock) return;
+    if (qty < 1 || qty > stock) return showToast(`Số lượng không hợp lệ. Tồn kho: ${stock}`, 'error');
+    for (let i = 0; i < qty; i++) {
+      document.dispatchEvent(new CustomEvent('addToCart', { detail: { ...product, storeName: store?.name, storeId: store?.id } }));
+    }
+    showToast(`Đã thêm ${qty} sản phẩm vào giỏ hàng!`, 'success');
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+          <h3 className="font-bold text-lg text-gray-800 line-clamp-1">{product.name}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition"><X size={22} /></button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+          <div className="bg-gray-100 flex items-center justify-center h-64 md:h-auto overflow-hidden">
+            <img src={product.image} alt={product.name} className="w-full h-full object-cover" onError={(e) => { (e.target as any).src = 'https://via.placeholder.com/400x300?text=Sản+phẩm'; }} />
+          </div>
+          <div className="p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-3xl font-black text-red-600">{Number(product.price).toLocaleString()}đ</p>
+              <p className="text-sm text-gray-500 mt-1">Bởi: <span className="font-bold text-bme-primary">{store?.name}</span></p>
+            </div>
+            <p className="text-sm text-gray-700 leading-relaxed">{product.description}</p>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Package size={16} className="text-gray-500" />
+              <span>Tồn kho: <strong className={stock === 0 ? 'text-red-600' : 'text-green-600'}>{stock} sản phẩm</strong></span>
+            </div>
+            {!isOutOfStock ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-gray-700">Số lượng:</span>
+                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                    <button onClick={() => setQty(q => Math.max(1, q - 1))} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 transition">−</button>
+                    <input type="number" min={1} max={stock} value={qty} onChange={e => setQty(Math.min(stock, Math.max(1, Number(e.target.value))))} className="w-14 text-center py-2 outline-none font-bold text-gray-800 border-x border-gray-300" />
+                    <button onClick={() => setQty(q => Math.min(stock, q + 1))} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 transition">+</button>
+                  </div>
+                </div>
+                <p className="text-sm font-bold text-gray-700">Tổng: <span className="text-red-600 text-lg">{(Number(product.price) * qty).toLocaleString()}đ</span></p>
+                <button onClick={handleAddToCart} className="w-full bg-bme-primary hover:bg-bme-secondary text-white font-bold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                  <ShoppingCart size={20} /> THÊM VÀO GIỎ HÀNG
+                </button>
+              </>
+            ) : (
+              <div className="w-full bg-gray-200 text-gray-500 font-bold py-3 rounded-xl text-center text-lg">HẾT HÀNG</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ------------------ StoreProfile ------------------
+export const StoreProfile = ({ currentUser, viewingStoreId, setViewingStoreId, mode = 'PUBLIC_MARKET' }: { currentUser: any, viewingStoreId: string | null, setViewingStoreId: (id: string | null) => void, mode?: 'PUBLIC_MARKET' | 'MERCHANT_DASHBOARD' }) => {
+  const [stores, setStores] = useState(() => safeGet('bme_stores', []));
+  const [products, setProducts] = useState(() => safeGet('bme_products', safeGet('products', [])));
+  const [orders, setOrders] = useState(() => safeGet('bme_orders', safeGet('orders', [])));
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [marketSearch, setMarketSearch] = useState('');
+  const [newStoreForm, setNewStoreForm] = useState({ name: '', description: '', address: '' });
+  const [newProductForm, setNewProductForm] = useState({ name: '', price: '', stock: '' });
+  const [productImageBase64, setProductImageBase64] = useState<string | null>(null);
+
+  const roleUpper = String(currentUser?.role || '').toUpperCase();
+  const businessTypeUpper = String(currentUser?.businessType || '').toUpperCase();
+  const isMerchant = roleUpper === 'BUSINESS' && businessTypeUpper === 'MERCHANT';
+  const myStore = stores.find((s: any) => s?.ownerPhone === currentUser?.phone);
+  const myProducts = products.filter((p: any) => p?.storeId === myStore?.id);
+  const myOrders = orders.filter((o: any) => o?.storeId === myStore?.id);
 
   useEffect(() => {
-    const refreshData = () => {
+    const syncData = () => {
       setStores(safeGet('bme_stores', []));
       setProducts(safeGet('bme_products', safeGet('products', [])));
       setOrders(safeGet('bme_orders', safeGet('orders', [])));
     };
-    refreshData();
-    const interval = setInterval(refreshData, 3000);
-    return () => clearInterval(interval);
+    syncData();
+    const timer = setInterval(syncData, 2500);
+    return () => clearInterval(timer);
   }, []);
 
+  const persistProducts = (nextProducts: any[]) => {
+    setProducts(nextProducts);
+    safeSet('bme_products', nextProducts);
+    safeSet('products', nextProducts);
+  };
+
   const handleCreateStore = () => {
-    if (!hasMerchantPermission) return showToast('Chỉ Business Merchant mới được tạo gian hàng riêng', 'error');
-    if (!currentUser?.phone) return showToast('Vui lòng đăng nhập đúng tài khoản Merchant', 'error');
-    if (!newStoreForm.name.trim() || !newStoreForm.description.trim() || !newStoreForm.address.trim()) {
-      return showToast('Vui lòng nhập đủ Tên gian hàng, Mô tả và Địa chỉ', 'error');
+    if (!isMerchant || !currentUser?.phone) {
+      showToast('Chỉ BUSINESS MERCHANT được phép tạo gian hàng', 'error');
+      return;
     }
-    const existedStore = stores.find((s: any) => s?.ownerPhone === currentUser?.phone);
-    if (existedStore?.id) {
-      setViewingStoreId(existedStore.id);
-      return showToast('Tài khoản đã có gian hàng, chuyển tới trang quản lý.', 'info');
+    if (!newStoreForm.name.trim() || !newStoreForm.description.trim() || !newStoreForm.address.trim()) {
+      showToast('Vui lòng nhập đủ Tên Shop, Mô tả và Địa chỉ', 'error');
+      return;
+    }
+    const existed = stores.find((s: any) => s?.ownerPhone === currentUser?.phone);
+    if (existed?.id) {
+      showToast('Tài khoản đã có gian hàng, chuyển sang dashboard quản lý', 'info');
+      return;
     }
 
-    const storePhone = newStoreForm.phone.trim() || currentUser?.phone;
     const createdStore = {
-      id: `s_${Date.now()}`,
+      id: `store_${Date.now()}`,
       ownerId: currentUser?.id,
       ownerPhone: currentUser?.phone,
       name: newStoreForm.name.trim(),
       description: newStoreForm.description.trim(),
       address: newStoreForm.address.trim(),
-      phone: storePhone,
-      status: 'online',
       rating: 5,
       feedback_count: 0,
-      products: []
+      status: 'online'
     };
-
-    const nextStores = [createdStore, ...(Array.isArray(stores) ? stores : [])];
+    const nextStores = [createdStore, ...stores];
     setStores(nextStores);
     safeSet('bme_stores', nextStores);
-    setNewStoreForm({ name: '', description: '', address: '', phone: '' });
-    setViewingStoreId(createdStore.id);
-    showToast('Đã tạo gian hàng riêng thành công!', 'success');
+    setNewStoreForm({ name: '', description: '', address: '' });
+    showToast('Khởi tạo gian hàng thành công', 'success');
   };
 
-  // =================================================
-  // LOGIC CHO CHỦ SHOP
-  // =================================================
-  const handleAddProduct = (currentStore: any) => {
-    if (!newProdForm.name || !newProdForm.price || !newProdForm.description || !newProdForm.image || newProdForm.stock === '') {
-      return showToast('Vui lòng nhập đầy đủ Tên, Giá, Mô tả, Ảnh và Số lượng kho', 'error');
+  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        setProductImageBase64(null);
+        return;
+      }
+
+      if (file.size > 500 * 1024) {
+        alert('Dung lượng ảnh quá lớn! Để hệ thống hoạt động ổn định, vui lòng chọn ảnh dưới 500KB.');
+        e.target.value = '';
+        return;
+      }
+
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Kết quả đọc ảnh không hợp lệ.'));
+        };
+        reader.onerror = () => {
+          reject(new Error('Không thể đọc ảnh đã chọn.'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setProductImageBase64(base64Image);
+    } catch (error) {
+      console.error('Lỗi khi xử lý ảnh sản phẩm:', error);
+      showToast('Không thể xử lý ảnh sản phẩm. Vui lòng thử lại!', 'error');
+      setProductImageBase64(null);
     }
-    if (Number(newProdForm.stock) < 0) return showToast('Số lượng kho không hợp lệ', 'error');
-    const newProduct = {
+  };
+
+  const handleAddProduct = () => {
+    if (!myStore?.id) {
+      showToast('Chưa xác định được gian hàng của bạn', 'error');
+      return;
+    }
+    if (!newProductForm.name.trim() || !newProductForm.price || !productImageBase64 || newProductForm.stock === '') {
+      showToast('Vui lòng nhập đủ Tên, Giá, Ảnh sản phẩm và Số lượng kho', 'error');
+      return;
+    }
+    const stockValue = Number(newProductForm.stock);
+    const priceValue = Number(newProductForm.price);
+    if (Number.isNaN(stockValue) || stockValue < 0 || Number.isNaN(priceValue) || priceValue < 0) {
+      showToast('Giá hoặc số lượng kho không hợp lệ', 'error');
+      return;
+    }
+
+    const createdProduct = {
       id: `prod_${Date.now()}`,
-      storeId: currentStore.id,
-      storeName: currentStore.name,
-      name: newProdForm.name,
-      price: Number(newProdForm.price),
-      stock: Number(newProdForm.stock) || 0,
+      storeId: myStore.id,
+      storeName: myStore.name,
+      name: newProductForm.name.trim(),
+      price: priceValue,
+      image: productImageBase64,
+      stock: stockValue,
       soldCount: 0,
-      image: newProdForm.image || 'https://via.placeholder.com/300',
-      description: newProdForm.description,
+      description: ''
     };
-    const nextProducts = [newProduct, ...products];
-    setProducts(nextProducts);
-    safeSet('bme_products', nextProducts);
-    safeSet('products', nextProducts);
-
-    const nextStores = stores.map((s: any) => {
-      if (s?.id !== currentStore?.id) return s;
-      const storeProducts = Array.isArray(s?.products) ? s.products : [];
-      return { ...s, products: [newProduct, ...storeProducts] };
-    });
-    setStores(nextStores);
-    safeSet('bme_stores', nextStores);
-
-    setNewProdForm({ name: '', price: '', stock: '10', image: '', description: '' });
-    showToast('Đã thêm sản phẩm mới thành công!', 'success');
+    const nextProducts = [createdProduct, ...products];
+    persistProducts(nextProducts);
+    setNewProductForm({ name: '', price: '', stock: '' });
+    setProductImageBase64(null);
+    showToast('Đăng sản phẩm thành công', 'success');
   };
 
   const handleDeleteProduct = (productId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) return;
-    const nextProducts = products.filter((p: any) => p.id !== productId);
-    setProducts(nextProducts);
-    safeSet('bme_products', nextProducts);
-    safeSet('products', nextProducts);
-
-    const nextStores = stores.map((s: any) => ({
-      ...s,
-      products: Array.isArray(s?.products) ? s.products.filter((p: any) => p?.id !== productId) : []
-    }));
-    setStores(nextStores);
-    safeSet('bme_stores', nextStores);
-
+    const target = myProducts.find((p: any) => p?.id === productId);
+    if (!target?.id) return;
+    const nextProducts = products.filter((p: any) => p?.id !== productId);
+    persistProducts(nextProducts);
     showToast('Đã xóa sản phẩm', 'info');
   };
 
-  const handleConfirmOrder = (orderId: string) => {
-    if (!myStore?.id) return;
-    const orderToShip = orders.find((o: any) => o.id === orderId);
-    if (!orderToShip) return;
-    if (orderToShip?.storeId !== myStore?.id) return;
+  const handleOpenStoreChat = (store: any) => {
+    if (!currentUser?.phone) {
+      showToast('Vui lòng đăng nhập để nhắn tin trao đổi', 'error');
+      return;
+    }
+    if (!store?.ownerPhone) {
+      showToast('Không tìm thấy thông tin liên hệ cửa hàng', 'error');
+      return;
+    }
+    if (store?.ownerPhone === currentUser?.phone) {
+      showToast('Bạn đang là chủ gian hàng này', 'info');
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('openChat', {
+      detail: {
+        id: store?.ownerId || store?.id,
+        name: store?.name || 'Cửa hàng',
+        phone: store?.ownerPhone,
+        role: 'business',
+        businessType: 'merchant'
+      }
+    }));
+  };
 
-    // Cập nhật trạng thái đơn hàng theo chuẩn shipped/success.
-    const nextOrders = orders.map((o: any) => o.id === orderId ? { ...o, status: 'SHIPPED' } : o);
+  const handleApproveOrder = (orderId: string) => {
+    if (!myStore?.id) return;
+    const order = myOrders.find((o: any) => o?.id === orderId);
+    if (!order?.id) return;
+
+    const nextOrders = orders.map((o: any) => o?.id === orderId ? { ...o, status: 'SHIPPED' } : o);
     setOrders(nextOrders);
     safeSet('bme_orders', nextOrders);
     safeSet('orders', nextOrders);
 
-    // Cập nhật kho và số lượng đã bán, hỗ trợ cả schema cũ (productId/quantity) và mới (items[]).
     const nextProducts = products.map((p: any) => {
-      const legacyQuantity = (orderToShip?.productId === p?.id) ? Number(orderToShip?.quantity || 0) : 0;
-      const orderedItem = (orderToShip.items || []).find((item: any) => item?.id === p.id);
-      const itemQuantity = Number(orderedItem?.qty || 0);
-      const deductQty = legacyQuantity + itemQuantity;
-      if (deductQty > 0) {
-        return {
-          ...p,
-          stock: Math.max(0, Number(p?.stock || 0) - deductQty),
-          soldCount: Number(p?.soldCount || 0) + deductQty,
-        };
-      }
-      return p;
-    });
-    setProducts(nextProducts);
-    safeSet('bme_products', nextProducts);
-    safeSet('products', nextProducts);
-
-    const nextStores = stores.map((s: any) => {
-      const curProducts = Array.isArray(s?.products) ? s.products : [];
+      if (p?.storeId !== myStore?.id) return p;
+      const itemFromArray = Array.isArray(order?.items) ? order.items.find((it: any) => it?.id === p?.id) : null;
+      const deductQty = itemFromArray?.qty != null
+        ? Number(itemFromArray?.qty || 0)
+        : (order?.productId === p?.id ? Number(order?.quantity || 0) : 0);
+      if (!deductQty || deductQty <= 0) return p;
       return {
-        ...s,
-        products: curProducts.map((sp: any) => {
-          const matched = nextProducts.find((np: any) => np?.id === sp?.id);
-          return matched ? { ...sp, stock: matched?.stock, soldCount: matched?.soldCount } : sp;
-        })
+        ...p,
+        stock: Math.max(0, Number(p?.stock || 0) - deductQty),
+        soldCount: Number(p?.soldCount || 0) + deductQty
       };
     });
-    setStores(nextStores);
-    safeSet('bme_stores', nextStores);
-
-    showToast(`Đã xác nhận giao đơn hàng ${orderId}`, 'success');
+    persistProducts(nextProducts);
+    showToast('Đã duyệt đơn và cập nhật tồn kho', 'success');
   };
 
-  const handleCancelOrder = (orderId: string) => {
-    if (!myStore?.id) return;
-    const targetOrder = orders.find((o: any) => o?.id === orderId);
-    if (!targetOrder || targetOrder?.storeId !== myStore?.id) return;
-    const nextOrders = orders.map((o: any) => o.id === orderId ? { ...o, status: 'Đã hủy' } : o);
-    setOrders(nextOrders);
-    safeSet('bme_orders', nextOrders);
-    safeSet('orders', nextOrders);
-    showToast(`Đã hủy đơn hàng ${orderId}`, 'info');
-  };
-
-  // =================================================
-  // LOGIC CHO CHỢ TỔNG
-  // =================================================
-  const marketProducts = (Array.isArray(products) && products.length > 0)
-    ? products
-    : (Array.isArray(stores) ? stores.flatMap((store: any) =>
-        (Array.isArray(store?.products) ? store.products : []).map((p: any) => ({
-          ...p,
-          storeId: p?.storeId || store?.id,
-          storeName: p?.storeName || store?.name,
-          stock: Number(p?.stock || 0),
-          soldCount: Number(p?.soldCount || 0)
-        }))
-      ) : []);
-
-  const filteredAndSortedProducts = marketProducts
-    .filter((p: any) => {
-      const store = stores.find((s: any) => s.id === p.storeId);
-      const lowerSearch = searchTerm.toLowerCase();
-      return p.name.toLowerCase().includes(lowerSearch) || store?.name.toLowerCase().includes(lowerSearch);
-    })
-    .sort((a: any, b: any) => {
-      switch (sortOrder) {
-        case 'price_asc': return a.price - b.price;
-        case 'price_desc': return b.price - a.price;
-        case 'best_selling': return (b.soldCount || 0) - (a.soldCount || 0);
-        default: return 0;
-      }
-    });
-
-  // =================================================
-  // RENDER LOGIC
-  // =================================================
-
-  // CẤP 1: Giao diện Chợ tổng khi không xem chi tiết cửa hàng nào
-  if (!viewingStoreId) {
-    if (hasMerchantPermission && !myStore?.id) {
+  // =========================
+  // MERCHANT DASHBOARD MODE
+  // =========================
+  if (mode === 'MERCHANT_DASHBOARD') {
+    if (!isMerchant) {
       return (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-xl font-bold text-gray-800">Khởi tạo gian hàng riêng</h3>
-            <p className="text-sm text-gray-600 mt-1">Tài khoản Merchant chưa có gian hàng. Vui lòng tạo gian hàng để sử dụng toàn bộ công năng quản lý kho và đơn hàng.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-              <input value={newStoreForm.name} onChange={(e) => setNewStoreForm({ ...newStoreForm, name: e.target.value })} placeholder="Tên gian hàng" className="p-2.5 border rounded" />
-              <input value={newStoreForm.phone} onChange={(e) => setNewStoreForm({ ...newStoreForm, phone: e.target.value })} placeholder="SĐT gian hàng (tuỳ chọn)" className="p-2.5 border rounded" />
-              <input value={newStoreForm.address} onChange={(e) => setNewStoreForm({ ...newStoreForm, address: e.target.value })} placeholder="Địa chỉ" className="p-2.5 border rounded md:col-span-2" />
-              <textarea value={newStoreForm.description} onChange={(e) => setNewStoreForm({ ...newStoreForm, description: e.target.value })} placeholder="Mô tả gian hàng" rows={3} className="p-2.5 border rounded md:col-span-2 resize-none" />
-            </div>
-            <button onClick={handleCreateStore} className="mt-4 bg-bme-primary hover:bg-bme-secondary text-white font-bold px-5 py-2.5 rounded-lg">Tạo gian hàng ngay</button>
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 text-center">
+          <p className="text-yellow-800 font-semibold text-lg">⚠️ Truy cập bị từ chối</p>
+          <p className="text-yellow-700 mt-2">Khu vực này chỉ dành cho BUSINESS MERCHANT.</p>
+        </div>
+      );
+    }
+
+    if (!myStore?.id) {
+      return (
+        <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
+          <h3 className="text-xl font-bold text-gray-800">Khởi tạo Gian hàng mới</h3>
+          <p className="text-sm text-gray-600">Tài khoản của bạn chưa có Shop. Vui lòng tạo một gian hàng duy nhất để bắt đầu kinh doanh.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input value={newStoreForm.name} onChange={(e) => setNewStoreForm({ ...newStoreForm, name: e.target.value })} placeholder="Tên Shop" className="p-2.5 border rounded" />
+            <input value={newStoreForm.address} onChange={(e) => setNewStoreForm({ ...newStoreForm, address: e.target.value })} placeholder="Địa chỉ" className="p-2.5 border rounded" />
+            <textarea value={newStoreForm.description} onChange={(e) => setNewStoreForm({ ...newStoreForm, description: e.target.value })} placeholder="Mô tả" rows={3} className="p-2.5 border rounded md:col-span-2 resize-none" />
           </div>
+          <button onClick={handleCreateStore} className="bg-bme-primary hover:bg-bme-secondary text-white font-bold px-5 py-2.5 rounded-lg">Tạo gian hàng</button>
         </div>
       );
     }
 
     return (
-      <div className="space-y-8">
-        {/* Search & Filter Bar */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Tìm theo tên sản phẩm hoặc tên Shop..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary"
-            />
+      <div className="space-y-6">
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h3 className="text-xl font-bold text-gray-800">Dashboard Gian hàng: {myStore?.name}</h3>
+          <p className="text-sm text-gray-500 mt-1">{myStore?.description}</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h4 className="font-bold text-gray-800 mb-4">Đăng bán sản phẩm mới</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <input value={newProductForm.name} onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })} placeholder="Tên" className="p-2 border rounded" />
+            <input type="number" value={newProductForm.price} onChange={(e) => setNewProductForm({ ...newProductForm, price: e.target.value })} placeholder="Giá" className="p-2 border rounded" />
+            <div className="space-y-2">
+              <input type="file" accept="image/*" onChange={handleProductImageUpload} className="w-full p-2 border rounded file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+              {productImageBase64 && <img src={productImageBase64} alt="Preview sản phẩm" className="h-16 w-16 object-cover rounded" />}
+            </div>
+            <input type="number" value={newProductForm.stock} onChange={(e) => setNewProductForm({ ...newProductForm, stock: e.target.value })} placeholder="Số lượng kho" className="p-2 border rounded" />
           </div>
-          <div className="relative min-w-[220px]">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="w-full pl-10 pr-8 py-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary appearance-none bg-white font-medium"
-            >
-              <option value="default">Sắp xếp mặc định</option>
-              <option value="price_asc">Giá từ thấp đến cao</option>
-              <option value="price_desc">Giá từ cao đến thấp</option>
-              <option value="best_selling">Bán chạy nhất</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+          <button onClick={handleAddProduct} className="mt-4 bg-bme-primary hover:bg-bme-secondary text-white font-bold px-5 py-2 rounded">Đăng sản phẩm</button>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h4 className="font-bold text-gray-800 mb-4">Bảng quản lý kho</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="p-3 font-bold">Tên sản phẩm</th>
+                  <th className="p-3 font-bold">Giá</th>
+                  <th className="p-3 font-bold">Kho</th>
+                  <th className="p-3 font-bold">Lượt bán</th>
+                  <th className="p-3 font-bold">Hành động</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myProducts.map((p: any) => (
+                  <tr key={p?.id} className="border-b">
+                    <td className="p-3 font-semibold">{p?.name}</td>
+                    <td className="p-3">{Number(p?.price || 0).toLocaleString()}đ</td>
+                    <td className="p-3">
+                      <div className="font-bold">{Number(p?.stock || 0)}</div>
+                      {Number(p?.stock || 0) === 0 && <div className="text-xs font-black text-red-700 mt-1">🚨 HẾT HÀNG</div>}
+                    </td>
+                    <td className="p-3">{Number(p?.soldCount || 0)}</td>
+                    <td className="p-3">
+                      <button onClick={() => handleDeleteProduct(p?.id)} className="text-red-600 hover:text-red-800 font-bold">Xóa</button>
+                    </td>
+                  </tr>
+                ))}
+                {myProducts.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-gray-500">Chưa có sản phẩm nào</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Featured Stores */}
-        <div>
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Cửa hàng nổi bật</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(stores || []).slice(0, 4).map((store: any) => (
-              <div key={store.id} onClick={() => setViewingStoreId(store.id)} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:border-bme-primary hover:shadow-md transition group">
-                <h4 className="font-bold text-lg text-gray-800 group-hover:text-bme-primary transition">{store.name}</h4>
-                <p className="text-sm text-gray-500 mt-1 line-clamp-2">{store.description}</p>
-                <div className="flex items-center gap-1 mt-3 text-yellow-500 font-bold text-sm">
-                  <Star size={16} fill="currentColor" /> {store.rating}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* All Products Grid */}
-        <div>
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Tất cả sản phẩm</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {filteredAndSortedProducts.map((p: any) => (
-              <div key={p.id} className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg transition flex flex-col overflow-hidden group">
-                <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <div className="p-4 flex flex-col flex-1">
-                  <h4 className="font-bold text-gray-800 line-clamp-2 flex-1">{p.name}</h4>
-                  <p className="text-xs text-gray-500 mt-1 mb-2" onClick={(e) => { e.stopPropagation(); setViewingStoreId(p.storeId); }}>
-                    Bởi <span className="font-semibold text-bme-primary hover:underline cursor-pointer">{p.storeName}</span>
-                  </p>
-                  <p className="text-xs font-semibold text-gray-600 mb-2">Còn lại: {Number(p?.stock || 0)} sản phẩm</p>
-                  <div className="flex justify-between items-center">
-                    <p className="text-bme-accent font-black text-lg">{Number(p.price).toLocaleString()}đ</p>
-                    {p.soldCount > 0 && <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Đã bán {p.soldCount}</span>}
-                  </div>
-                  <button
-                    disabled={Number(p?.stock || 0) === 0}
-                    onClick={() => document.dispatchEvent(new CustomEvent('addToCart', { detail: p }))}
-                    className={`w-full mt-3 font-bold py-2 rounded-lg transition flex items-center justify-center gap-2 ${Number(p?.stock || 0) === 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white'}`}
-                  >
-                    <ShoppingBag size={18} /> {Number(p?.stock || 0) === 0 ? 'HẾT HÀNG' : 'Mua ngay'}
-                  </button>
-                </div>
-              </div>
-            ))}
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h4 className="font-bold text-gray-800 mb-4">Bảng quản lý đơn hàng</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="p-3 font-bold">Mã đơn</th>
+                  <th className="p-3 font-bold">Sản phẩm</th>
+                  <th className="p-3 font-bold">Khách hàng</th>
+                  <th className="p-3 font-bold">Tổng</th>
+                  <th className="p-3 font-bold">Trạng thái</th>
+                  <th className="p-3 font-bold">Xử lý</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myOrders.map((o: any) => (
+                  <tr key={o?.id} className="border-b">
+                    <td className="p-3 font-mono text-xs">{o?.id}</td>
+                    <td className="p-3">{Array.isArray(o?.items) ? o.items.map((item: any) => `${item?.name || 'Sản phẩm'} x${item?.qty || 0}`).join(', ') : (o?.productName || 'N/A')}</td>
+                    <td className="p-3">{o?.buyerPhone || 'N/A'}</td>
+                    <td className="p-3 font-bold text-red-600">{Number(o?.totalPrice || 0).toLocaleString()}đ</td>
+                    <td className="p-3">{o?.status}</td>
+                    <td className="p-3">
+                      {(o?.status === 'Chờ xác nhận' || o?.status === 'PENDING') && (
+                        <button onClick={() => handleApproveOrder(o?.id)} className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-bold">Duyệt đơn</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {myOrders.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-gray-500">Chưa có đơn hàng nào</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     );
   }
 
-  // CẤP 2: Giao diện chi tiết một cửa hàng
-  const activeStore = stores.find((s: any) => s.id === viewingStoreId);
-  if (!activeStore) {
-    return <div className="text-center p-10">Không tìm thấy cửa hàng. <button onClick={() => setViewingStoreId(null)} className="text-blue-600 font-bold">Quay lại</button></div>;
-  }
+  // =========================
+  // PUBLIC MARKET MODE
+  // =========================
+  const normalizedMarketSearch = String(marketSearch || '').toLowerCase();
+  const visibleStores = (Array.isArray(stores) ? stores : []).filter((s: any) => {
+    const storeName = String(s?.name || '').toLowerCase();
+    const storeDesc = String(s?.description || '').toLowerCase();
+    const storeAddress = String(s?.address || '').toLowerCase();
+    return storeName.includes(normalizedMarketSearch) || storeDesc.includes(normalizedMarketSearch) || storeAddress.includes(normalizedMarketSearch);
+  });
+  const activeStore = stores.find((s: any) => s?.id === viewingStoreId);
+  const storeProducts = (Array.isArray(products) ? products : []).filter((p: any) => p?.storeId === viewingStoreId);
+  const visibleProducts = (Array.isArray(products) ? products : []).filter((p: any) => {
+    const productName = String(p?.name || '').toLowerCase();
+    const storeName = String(p?.storeName || '').toLowerCase();
+    return productName.includes(normalizedMarketSearch) || storeName.includes(normalizedMarketSearch);
+  });
 
-  const normalizedRole = String(currentUser?.role || '').toLowerCase();
-
-  // Anti-bypass: chỉ business/merchant hợp lệ mới được thấy dashboard quản lý.
-  const canManageDashboard = !(
-    !currentUser ||
-    !hasMerchantPermission
-  ) && !!myStore?.id && activeStore?.id === myStore?.id;
-
-  // Store data isolation tuyệt đối theo ownerPhone -> myStore.id.
-  const myProducts = products.filter((p: any) => p?.storeId === myStore?.id);
-  const myOrders = orders.filter((o: any) => o?.storeId === myStore?.id);
-  const storeProducts = marketProducts.filter((p: any) => p.storeId === viewingStoreId);
-
-  // Tính toán thống kê cho chủ shop
-  const totalProducts = myProducts.length;
-  const totalStockUnits = myProducts.reduce((sum: number, p: any) => sum + Number(p?.stock || 0), 0);
-  const outOfStockProducts = myProducts.filter((p: any) => Number(p?.stock || 0) === 0).length;
-  const totalRevenue = myOrders
-    .filter((o: any) => o?.status === 'Đã hoàn thành' || o?.status === 'SHIPPED' || o?.status === 'SUCCESS')
-    .reduce((sum: number, o: any) => sum + o.totalPrice, 0);
-  const lowStockProducts = myProducts.filter((p: any) => Number(p?.stock || 0) <= 5);
-  const totalSold = myProducts.reduce((sum: number, p: any) => sum + Number(p?.soldCount || 0), 0);
-  const topSoldProduct = [...myProducts].sort((a: any, b: any) => Number(b?.soldCount || 0) - Number(a?.soldCount || 0))[0];
-  const bestSellingProducts = [...myProducts].sort((a: any, b: any) => Number(b?.soldCount || 0) - Number(a?.soldCount || 0));
-  const monthLabel = new Date().toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' });
-  const previousRevenue = Math.max(1, totalRevenue * 0.85);
-  const growthPercent = previousRevenue > 0 ? Math.max(0, ((totalRevenue - previousRevenue) / previousRevenue) * 100) : 0;
-
-  return (
-    <div className="space-y-6">
-      <button onClick={() => setViewingStoreId(null)} className="flex items-center gap-2 font-bold text-gray-600 hover:text-bme-primary transition bg-white px-4 py-2 rounded-lg shadow-sm border">
-        <ArrowLeft size={18} /> Quay lại Chợ tổng
-      </button>
-
-      {/* Store Header */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-3xl font-bold text-gray-800">{activeStore.name}</h2>
-        <p className="text-gray-600 mt-1">{activeStore.description}</p>
-        <div className="flex items-center gap-4 mt-2 text-sm">
-          <span className="flex items-center gap-1 text-yellow-500 font-bold"><Star size={16} fill="currentColor" /> {activeStore.rating}</span>
-          <span className="flex items-center gap-1 text-gray-500"><MapPin size={14} /> {activeStore.address}</span>
+  if (!viewingStoreId) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+          <h3 className="text-xl font-bold text-gray-800 mb-3">Chợ Y tế hiện đại</h3>
+          <input value={marketSearch} onChange={(e) => setMarketSearch(e.target.value)} placeholder="Tìm theo tên Shop, sản phẩm, địa chỉ..." className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:border-bme-primary" />
         </div>
-      </div>
 
-      {/* Bảng điều khiển dành cho Chủ Shop */}
-      {canManageDashboard && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">Trung tâm điều hành Merchant</h3>
-                <p className="text-sm text-gray-500 mt-1">Tổng hợp doanh thu, tăng trưởng và cảnh báo kho theo thời gian thực.</p>
-              </div>
-              <button onClick={() => setShowSmartReport(!showSmartReport)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg transition">Xuất báo cáo thông minh</button>
-            </div>
-            {showSmartReport && (
-              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
-                  <p className="text-xs text-indigo-700 font-bold uppercase">Doanh thu tháng {monthLabel}</p>
-                  <p className="text-2xl font-black text-indigo-700 mt-1">{Number(totalRevenue || 0).toLocaleString()}đ</p>
-                  <p className="text-xs text-indigo-600 mt-2">Tăng trưởng ước tính: +{growthPercent.toFixed(1)}%</p>
-                  <div className="mt-3 h-2.5 bg-indigo-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-600" style={{ width: `${Math.min(100, growthPercent)}%` }}></div>
+        <div className="space-y-3">
+          <h4 className="font-bold text-gray-800">Danh sách cửa hàng</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {visibleStores.map((store: any) => {
+              const isStoreOnline = store?.isOnline !== false;
+              return (
+                <div key={store?.id} onClick={() => setViewingStoreId(store?.id)} className="bg-white p-5 rounded-xl border border-gray-200 cursor-pointer shadow-md hover:shadow-xl transition-transform hover:-translate-y-1">
+                  <h4 className="font-bold text-lg text-gray-800 line-clamp-1">{store?.name}</h4>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{store?.description}</p>
+                  <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><MapPin size={12}/> {store?.address || 'Chưa cập nhật địa chỉ'}</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${isStoreOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`}></span>
+                    <span className={`text-xs font-bold ${isStoreOnline ? 'text-green-600' : 'text-gray-500'}`}>{isStoreOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}</span>
                   </div>
                 </div>
-                <div className="bg-green-50 border border-green-100 rounded-lg p-4">
-                  <p className="text-xs text-green-700 font-bold uppercase">Sản lượng đã bán</p>
-                  <p className="text-2xl font-black text-green-700 mt-1">{totalSold}</p>
-                  <p className="text-xs text-green-700 mt-2">Top sản phẩm: {topSoldProduct?.name || 'Chưa có'}</p>
-                </div>
-                <div className="bg-red-50 border border-red-100 rounded-lg p-4">
-                  <p className="text-xs text-red-700 font-bold uppercase">Cảnh báo kho sắp cạn</p>
-                  <p className="text-2xl font-black text-red-700 mt-1">{lowStockProducts.length}</p>
-                  <p className="text-xs text-red-700 mt-2">Mặt hàng tồn ≤ 5 cần nhập thêm.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 1. Thống kê */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Thống kê Kho & Kinh doanh</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg text-center"><p className="text-3xl font-black text-blue-600">{totalProducts}</p><p className="text-sm font-semibold text-blue-800 mt-1">Sản phẩm đang bán</p></div>
-              <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg text-center"><p className="text-3xl font-black text-orange-600">{outOfStockProducts}</p><p className="text-sm font-semibold text-orange-800 mt-1">Sản phẩm hết hàng</p></div>
-              <div className="bg-green-50 border border-green-200 p-4 rounded-lg text-center"><p className="text-3xl font-black text-green-600">{totalRevenue.toLocaleString()}đ</p><p className="text-sm font-semibold text-green-800 mt-1">Tổng doanh thu</p></div>
-            </div>
-            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm font-semibold text-gray-700">
-              Tổng số lượng sản phẩm đang có trong kho: <span className="text-bme-primary font-black">{totalStockUnits}</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Bảng xếp hạng bán chạy theo soldCount</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr className="bg-gray-100"><th className="p-3 font-bold">Sản phẩm</th><th className="p-3 font-bold">Đã bán</th><th className="p-3 font-bold">Tồn kho</th></tr></thead>
-                <tbody>
-                  {bestSellingProducts.map((p: any) => (
-                    <tr key={p.id} className="border-b">
-                      <td className="p-3 font-semibold">{p.name}</td>
-                      <td className="p-3">{Number(p?.soldCount || 0)}</td>
-                      <td className="p-3">{Number(p?.stock || 0)}</td>
-                    </tr>
-                  ))}
-                  {bestSellingProducts.length === 0 && <tr><td className="p-3 text-gray-500" colSpan={3}>Chưa có dữ liệu bán chạy.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* 2. Quản lý Sản phẩm */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">📦 Quản lý Sản phẩm & Đăng bán mới</h3>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                <input value={newProdForm.name} onChange={e => setNewProdForm({...newProdForm, name: e.target.value})} placeholder="Tên sản phẩm" className="p-2 border rounded" />
-                <input type="number" value={newProdForm.price} onChange={e => setNewProdForm({...newProdForm, price: e.target.value})} placeholder="Giá tiền" className="p-2 border rounded" />
-                <input type="number" value={newProdForm.stock} onChange={e => setNewProdForm({...newProdForm, stock: e.target.value})} placeholder="Số lượng kho" className="p-2 border rounded" />
-                <input value={newProdForm.image} onChange={e => setNewProdForm({...newProdForm, image: e.target.value})} placeholder="Link ảnh sản phẩm" className="p-2 border rounded" />
-              </div>
-              <textarea value={newProdForm.description} onChange={e => setNewProdForm({...newProdForm, description: e.target.value})} placeholder="Mô tả sản phẩm" rows={2} className="mt-3 w-full p-2 border rounded resize-none" />
-              <button onClick={() => handleAddProduct(myStore)} className="mt-3 bg-bme-secondary hover:bg-bme-primary text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16} /> Thêm sản phẩm</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr className="bg-gray-100"><th className="p-3 font-bold">Sản phẩm</th><th className="p-3 font-bold">Giá</th><th className="p-3 font-bold">Kho</th><th className="p-3 font-bold">Đã bán</th><th className="p-3 font-bold">Hành động</th></tr></thead>
-                <tbody>
-                  {myProducts.map((p: any) => (
-                    <tr key={p.id} className="border-b"><td className="p-3 font-semibold">{p.name}</td><td className="p-3">{Number(p.price).toLocaleString()}đ</td><td className="p-3"><div className="font-bold">{Number(p?.stock || 0)}</div>{Number(p?.stock || 0) === 0 && <div className="text-xs font-black text-red-700 mt-1">🚨 CẢNH BÁO: HẾT HÀNG</div>}</td><td className="p-3">{p.soldCount || 0}</td><td className="p-3"><button onClick={() => handleDeleteProduct(p.id)} className="text-red-500 hover:text-red-700 p-1"><Trash2 size={16} /></button></td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* 3. Quản lý Đơn hàng */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Quản lý Đơn đặt hàng</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead><tr className="bg-gray-100"><th className="p-3 font-bold">Mã Đơn</th><th className="p-3 font-bold">Sản phẩm</th><th className="p-3 font-bold">SĐT Khách</th><th className="p-3 font-bold">Tổng tiền</th><th className="p-3 font-bold">Trạng thái</th><th className="p-3 font-bold">Xử lý</th></tr></thead>
-                <tbody>
-                  {myOrders.map((o: any) => (
-                    <tr key={o.id} className="border-b">
-                      <td className="p-3 font-mono text-xs">{o.id}</td>
-                      <td className="p-3 font-semibold">{Array.isArray(o?.items) ? o.items.map((item: any) => `${item?.name || 'Sản phẩm'} x${item?.qty || 0}`).join(', ') : (o?.productName || 'N/A')}</td>
-                      <td className="p-3">{o.buyerPhone}</td>
-                      <td className="p-3 font-bold text-red-600">{o.totalPrice.toLocaleString()}đ</td>
-                      <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${o.status === 'Chờ xác nhận' ? 'bg-yellow-100 text-yellow-800' : o.status === 'Đang giao hàng' || o.status === 'SHIPPED' ? 'bg-blue-100 text-blue-800' : o.status === 'Đã hoàn thành' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{o.status}</span></td>
-                      <td className="p-3">
-                        {(o.status === 'Chờ xác nhận' || o.status === 'PENDING') && (
-                          <div className="flex gap-2">
-                            <button onClick={() => handleConfirmOrder(o.id)} className="px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs font-bold" title="Phê duyệt đơn hàng">PHÊ DUYỆT ĐƠN HÀNG</button>
-                            <button onClick={() => handleCancelOrder(o.id)} className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600" title="Hủy đơn"><X size={16} /></button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              );
+            })}
+            {visibleStores.length === 0 && <div className="col-span-full bg-white p-6 text-center text-gray-500 rounded-xl border border-dashed">Không có gian hàng phù hợp</div>}
           </div>
         </div>
-      )}
 
-      {/* Giao diện công khai cho người dùng thường */}
-      {!canManageDashboard && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Sản phẩm của {activeStore.name}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {storeProducts.map((p: any) => (
-              <div key={p.id} className="border rounded-lg overflow-hidden group">
-                <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden"><img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /></div>
-                <div className="p-3">
-                  <h4 className="font-bold line-clamp-2">{p.name}</h4>
-                  <p className="text-bme-accent font-bold text-lg mt-1">{Number(p.price).toLocaleString()}đ</p>
-                  <p className="text-xs font-semibold text-gray-600 mt-1">Còn lại: {Number(p?.stock || 0)} sản phẩm</p>
-                  <button
-                    disabled={Number(p?.stock || 0) === 0}
-                    onClick={() => document.dispatchEvent(new CustomEvent('addToCart', { detail: p }))}
-                    className={`w-full mt-2 font-bold py-2 rounded-lg transition ${Number(p?.stock || 0) === 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white'}`}
-                  >
-                    {Number(p?.stock || 0) === 0 ? 'HẾT HÀNG' : 'Mua ngay'}
-                  </button>
+        <div className="space-y-3">
+          <h4 className="font-bold text-gray-800">Sản phẩm nổi bật toàn sàn</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-5">
+            {visibleProducts.map((p: any) => (
+              <div key={p?.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-md hover:shadow-xl transition-transform hover:-translate-y-1">
+                <div className="aspect-square bg-gray-100 overflow-hidden">
+                  <img src={p?.image} alt={p?.name} className="w-full h-full object-cover" />
+                </div>
+                <div className="p-4">
+                  <p className="text-xs text-gray-500 truncate">{p?.storeName || 'Không rõ cửa hàng'}</p>
+                  <h4 className="font-bold text-gray-800 line-clamp-2 min-h-[40px] mt-1">{p?.name}</h4>
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-bme-accent font-black text-lg">{Number(p?.price || 0).toLocaleString()}đ</p>
+                    <span className="text-xs font-semibold text-gray-500">Kho: {Number(p?.stock || 0)}</span>
+                  </div>
+                  <button onClick={() => { setViewingStoreId(p?.storeId || null); }} className="w-full mt-3 bg-blue-50 hover:bg-bme-primary hover:text-white text-bme-primary font-bold py-2 rounded-lg transition">Xem tại gian hàng</button>
                 </div>
               </div>
             ))}
+            {visibleProducts.length === 0 && <div className="col-span-full bg-white p-6 text-center text-gray-500 rounded-xl border border-dashed">Không có sản phẩm phù hợp bộ lọc</div>}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <button onClick={() => setViewingStoreId(null)} className="flex items-center gap-2 font-bold text-gray-700 hover:text-bme-primary bg-white px-4 py-2 rounded-lg border">
+          <ArrowLeft size={18} /> Quay lại Chợ tổng
+        </button>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <h3 className="text-2xl font-bold text-gray-800">{activeStore?.name || 'Gian hàng'}</h3>
+          <p className="text-gray-600 mt-1">{activeStore?.description}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+            <p className="flex items-center gap-2"><MapPin size={16}/> {activeStore?.address || 'Chưa cập nhật địa chỉ'}</p>
+            <p className="flex items-center gap-2"><span className={`w-2.5 h-2.5 rounded-full ${activeStore?.isOnline !== false ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`}></span><span className={activeStore?.isOnline !== false ? 'text-green-600 font-bold' : 'text-gray-500'}>{activeStore?.isOnline !== false ? 'Đang hoạt động' : 'Ngoại tuyến'}</span></p>
+            <button onClick={() => handleOpenStoreChat(activeStore)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"><MessageCircle size={16}/> Nhắn tin trao đổi</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {storeProducts.map((p: any) => (
+            <div key={p?.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-transform hover:-translate-y-1">
+              <div className="aspect-square bg-gray-100 overflow-hidden"><img src={p?.image} alt={p?.name} className="w-full h-full object-cover" /></div>
+              <div className="p-4">
+                <h4 className="font-bold line-clamp-2 min-h-[40px]">{p?.name}</h4>
+                <p className="text-bme-accent font-black text-xl mt-1">{Number(p?.price || 0).toLocaleString()}đ</p>
+                <p className="text-xs font-semibold text-gray-600 mt-1">Tồn kho: {Number(p?.stock || 0)}</p>
+                <button onClick={() => setSelectedProduct(p)} className={`w-full mt-3 font-bold py-2 rounded-lg transition ${Number(p?.stock || 0) === 0 ? 'bg-gray-200 text-gray-500' : 'bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white'}`}>
+                  {Number(p?.stock || 0) === 0 ? 'HẾT HÀNG' : 'Xem chi tiết'}
+                </button>
+              </div>
+            </div>
+          ))}
+          {storeProducts.length === 0 && <div className="col-span-full bg-white p-6 text-center text-gray-500 rounded-xl border border-dashed">Shop chưa có sản phẩm nào</div>}
+        </div>
+      </div>
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          store={activeStore || stores.find((s: any) => s?.id === selectedProduct?.storeId)}
+          currentUser={currentUser}
+          onClose={() => setSelectedProduct(null)}
+        />
       )}
-    </div>
+    </>
   );
 };
 
@@ -1547,7 +1585,7 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
   const [feedbacks, setFeedbacks] = useState(() => safeGet('bme_feedbacks', []));
   const [ratingVal, setRatingVal] = useState(5);
   const [commentText, setCommentText] = useState('');
-  const [otpCode, setOtpCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   const user = users.find((u:any) => u.id === userId);
 
@@ -1558,14 +1596,14 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
   const userStore = stores.find((s:any) => s.ownerId === userId);
   const userPosts = posts.filter((p:any) => p.authorId === userId);
   const myOrders = orders.filter((o:any) => o.buyerId === userId);
+  // Saved posts for the profile owner
+  const savedPostIds: string[] = user?.savedPostIds || [];
+  const savedPosts = posts.filter((p: any) => savedPostIds.includes(p.id));
 
-  const [editForm, setEditForm] = useState({
-    name: user.name || '',
-    password: user.password || '',
-    phone: user.phone || '',
+  const [securityForm, setSecurityForm] = useState({
+    password: '',
     cccd: user.cccd || '',
-    taxId: user.taxId || '',
-    role: user.role || 'user'
+    taxId: user.taxId || ''
   });
 
   const isTechOrExpert = user.role === 'coordinator' || user.businessType === 'engineer';
@@ -1594,8 +1632,8 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
   };
 
   const handleSubmitUpdateRequest = () => {
-    if (!otpCode?.trim()) {
-      showToast('Vui lòng nhập mã OTP xác thực trước khi gửi yêu cầu', 'error');
+    if (!securityForm.password.trim() && !securityForm.cccd.trim() && !securityForm.taxId.trim()) {
+      showToast('Vui lòng nhập ít nhất 1 thông tin bảo mật cần thay đổi', 'error');
       return;
     }
 
@@ -1608,16 +1646,23 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
       oldData: {
         name: user.name, password: user.password, phone: user.phone, cccd: user.cccd || '', taxId: user.taxId || '', role: user.role
       },
-      newData: { ...editForm },
-      otpCode,
+      newData: {
+        password: securityForm.password.trim() || user.password || '',
+        cccd: securityForm.cccd.trim(),
+        taxId: securityForm.taxId.trim()
+      },
       status: 'PENDING',
       createdAt: new Date().toLocaleString()
     };
     const nextRequests = [...requestsArray, newReq];
     safeSet('adminChangeRequests', nextRequests);
     safeSet('bme_admin_change_requests', nextRequests);
-    showToast('Yêu cầu thay đổi thông tin đã được gửi và đang chờ Admin phê duyệt', 'success');
-    setOtpCode('');
+    showToast('Yêu cầu thay đổi bảo mật đã được gửi và đang chờ Admin phê duyệt', 'success');
+    setSecurityForm({
+      password: '',
+      cccd: securityForm.cccd,
+      taxId: securityForm.taxId
+    });
   };
 
   return (
@@ -1723,6 +1768,45 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
           </div>
         )}
 
+        {/* KHO XEM LẠI BÀI VIẾT ĐÃ LƯU */}
+        {currentUser?.id === userId && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="font-bold text-lg mb-4 border-b pb-2 flex items-center gap-2">
+              <Bookmark size={20} className="text-bme-primary fill-bme-primary" /> Kho bài viết đã lưu ({savedPosts.length})
+            </h3>
+            {savedPosts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 border border-dashed border-gray-300 rounded-xl">
+                <Bookmark size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Chưa có bài viết nào được lưu trữ.</p>
+                <p className="text-sm mt-1">Hãy bấm nút "Lưu bài viết" trên các bài đăng bạn muốn xem lại.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {savedPosts.map((p: any) => (
+                  <div key={p.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 hover:border-bme-primary transition">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-bold text-gray-800">{p.author}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-semibold">{p.category}</span>
+                        <span className="text-xs text-gray-400">{p.time}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 line-clamp-3 leading-relaxed">{p.content}</p>
+                    {p.attachment && p.attachment.typeLabel !== 'Image' && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-bme-primary font-semibold">
+                        <FileText size={14} /> {p.attachment.name}
+                      </div>
+                    )}
+                    {p.images && p.images.length > 0 && (
+                      <img src={p.images[0]} alt="post" className="mt-2 rounded-lg max-h-32 object-cover border border-gray-200" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Đánh giá Kỹ sư / Chuyên gia */}
         {isTechOrExpert && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
@@ -1766,74 +1850,53 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
       <div className="lg:col-span-4 space-y-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 sticky top-24">
           <h3 className="font-bold text-lg mb-4 border-b pb-2 flex items-center gap-2">
-            <Lock size={20} className="text-orange-500" /> Cập nhật thông tin bảo mật
+            <Lock size={20} className="text-orange-500" /> Yêu cầu thay đổi bảo mật
           </h3>
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Thông tin tài khoản hiện tại</p>
+            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Thông tin tài khoản bảo mật</p>
             <p className="text-sm text-gray-700">SĐT: <strong>{user?.phone || 'N/A'}</strong></p>
             <p className="text-sm text-gray-700">CCCD: <strong>{user?.cccd || 'Chưa cập nhật'}</strong></p>
             <p className="text-sm text-gray-700">MST: <strong>{user?.taxId || 'Chưa cập nhật'}</strong></p>
-            <p className="text-sm text-gray-700">Mật khẩu: <strong>{user?.password || 'N/A'}</strong></p>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span>Mật khẩu: <strong className="font-mono tracking-widest">{showPassword ? (user?.password || 'N/A') : '••••••••'}</strong></span>
+              <button onClick={() => setShowPassword(v => !v)} className="text-xs font-bold text-bme-primary hover:underline px-2 py-0.5 bg-blue-50 border border-blue-200 rounded flex items-center gap-1">
+                <Eye size={12} /> {showPassword ? 'Ẩn đi' : 'Hiển thị'}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Họ và tên</label>
-              <input 
-                value={editForm.name} 
-                onChange={e => setEditForm({...editForm, name: e.target.value})} 
-                className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary" 
-              />
-            </div>
-            <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Mật khẩu mới</label>
               <input 
                 type="password"
-                value={editForm.password} 
-                onChange={e => setEditForm({...editForm, password: e.target.value})} 
+                value={securityForm.password} 
+                onChange={e => setSecurityForm({...securityForm, password: e.target.value})} 
                 className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary" 
                 placeholder="Để trống nếu không đổi"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Số điện thoại</label>
-              <input
-                value={editForm.phone}
-                onChange={e => setEditForm({...editForm, phone: e.target.value})}
-                className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">CCCD</label>
               <input 
-                value={editForm.cccd} 
-                onChange={e => setEditForm({...editForm, cccd: e.target.value})} 
+                value={securityForm.cccd} 
+                onChange={e => setSecurityForm({...securityForm, cccd: e.target.value})} 
                 className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary" 
               />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Mã số thuế (nếu có)</label>
               <input 
-                value={editForm.taxId} 
-                onChange={e => setEditForm({...editForm, taxId: e.target.value})} 
+                value={securityForm.taxId} 
+                onChange={e => setSecurityForm({...securityForm, taxId: e.target.value})} 
                 className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary" 
               />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Mã OTP xác thực</label>
-              <input
-                value={otpCode}
-                onChange={e => setOtpCode(e.target.value)}
-                placeholder="Nhập OTP được Admin cung cấp"
-                className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-bme-primary"
-              />
-              <p className="text-xs text-orange-600 mt-1 font-semibold">Vui lòng liên hệ Admin để lấy mã OTP xác thực</p>
             </div>
             <button 
               onClick={handleSubmitUpdateRequest} 
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg shadow-sm transition flex justify-center items-center gap-2">
-              <Send size={18}/> Gửi yêu cầu cập nhật
+              <Send size={18}/> Gửi yêu cầu
             </button>
             <p className="text-xs text-gray-500 text-center">Lưu ý: Yêu cầu sẽ ở trạng thái PENDING cho đến khi Admin bấm PHÊ DUYỆT.</p>
           </div>
@@ -1847,21 +1910,19 @@ export const UserProfile = ({ userId, currentUser }: { userId: string, currentUs
 export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
   // Phân quyền Tab hiển thị dựa trên vai trò
   const role = currentUser?.role;
-  const isSupervisor = role === 'supervisor' || role === 'admin';
-  const isCoordinator = role === 'coordinator' || role === 'admin';
+  const isSupervisor = role === 'supervisor';
   const isAdmin = role === 'admin';
-  
-  const defaultTab = isAdmin ? 'analytics_center' : (isSupervisor ? 'supervisor_panel' : 'coordinator_panel');
+  // Supervisor: chỉ có tab kiểm tra chéo. Admin: tập trung hỗ trợ người dùng + mật khẩu
+  const defaultTab = isAdmin ? 'admin_support' : 'supervisor_inspection';
   const [tab, setTab] = useState(defaultTab);
-  const [analyticsFilter, setAnalyticsFilter] = useState('top_stores');
   const [users, setUsers] = useState(()=> safeGet('bme_users', []));
   const [posts, setPosts] = useState(()=> safeGet('bme_posts', []));
   const [communities, setCommunities] = useState(()=> safeGet('bme_communities', []));
   const [logs, setLogs] = useState(()=> safeGet('bme_audit_logs', []));
-  const [orders, setOrders] = useState(()=> safeGet('bme_orders', []));
-  const [stores, setStores] = useState(()=> safeGet('bme_stores', []));
   const [changeRequests, setChangeRequests] = useState(()=> safeGet('adminChangeRequests', safeGet('bme_admin_change_requests', [])));
   const [adminNotifs, setAdminNotifs] = useState(()=> safeGet('adminNotifications', safeGet('bme_admin_notifications', [])));
+  const [supportMessages, setSupportMessages] = useState(()=> safeGet('bme_support_messages', []));
+  const [activeAnalytics, setActiveAnalytics] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAdminData = () => {
@@ -1869,10 +1930,9 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
       setPosts(safeGet('bme_posts', []));
       setCommunities(safeGet('bme_communities', []));
       setLogs(safeGet('bme_audit_logs', []));
-      setOrders(safeGet('bme_orders', []));
-      setStores(safeGet('bme_stores', []));
       setChangeRequests(safeGet('adminChangeRequests', safeGet('bme_admin_change_requests', [])));
       setAdminNotifs(safeGet('adminNotifications', safeGet('bme_admin_notifications', [])));
+      setSupportMessages(safeGet('bme_support_messages', []));
     };
     const interval = setInterval(fetchAdminData, 3000);
     return () => clearInterval(interval);
@@ -1884,18 +1944,10 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
     setLogs(prev => { const next = [newLog, ...prev]; safeSet('bme_audit_logs', next); return next; });
   };
 
-  // Supervisor actions
-  const banUser = (id:string) => { const next = users.map((u:any)=>u.id===id?{...u,status:'Banned'}:u); setUsers(next); safeSet('bme_users', next); writeLog(`Cấm tài khoản ID: ${id}`); showToast('Đã cấm tài khoản thành công', 'success'); };
-  const deletePost = (id:string) => { const next = posts.filter((p:any)=>p.id!==id); setPosts(next); safeSet('bme_posts', next); writeLog(`Xóa bài viết ID: ${id}`); showToast('Đã xóa bài viết khỏi hệ thống', 'success'); };
+  // Supervisor actions (chỉ xóa bài/nhóm/user vi phạm)
+  const deletePost = (id:string) => { const next = posts.filter((p:any)=>p.id!==id); setPosts(next); safeSet('bme_posts', next); writeLog(`Supervisor xóa bài viết vi phạm ID: ${id}`); showToast('Đã xóa bài viết vi phạm', 'success'); };
 
   // Coordinator actions
-  const approveCommunity = (id:string) => { const next = communities.map((c:any)=>c.id===id?{...c,status:'Approved'}:c); setCommunities(next); safeSet('bme_communities', next); writeLog(`Phê duyệt nhóm ID: ${id}`); showToast('Đã phê duyệt nhóm', 'success'); };
-  const rejectCommunity = (id:string) => { const next = communities.filter((c:any)=>c.id!==id); setCommunities(next); safeSet('bme_communities', next); writeLog(`Từ chối nhóm chờ duyệt ID: ${id}`); showToast('Đã từ chối và xóa nhóm', 'info'); };
-
-  // Admin actions
-  const unbanUser = (id:string) => { const next = users.map((u:any)=>u.id===id?{...u,status:'active'}:u); setUsers(next); safeSet('bme_users', next); writeLog(`Mở khóa tài khoản ID: ${id}`); showToast('Đã mở khóa tài khoản', 'success'); };
-  const deleteCommunity = (id:string) => { const next = communities.filter((c:any)=>c.id!==id); setCommunities(next); safeSet('bme_communities', next); writeLog(`Gỡ bỏ nhóm ID: ${id}`); showToast('Đã gỡ bỏ nhóm khỏi hệ thống', 'success'); };
-
   // Account Change Request actions
   const approveAccountRequest = (req: any) => {
     const currentUsers = safeGet('bme_users', []);
@@ -1921,144 +1973,98 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
     showToast('Đã từ chối yêu cầu cập nhật', 'info');
   };
 
-  const simulatePushAlert = () => {
-    showToast('🚀 Đã GỬI THÔNG BÁO ĐIỀU PHỐI (Push Notification) đến các Store và Kỹ thuật viên gần các vùng đỏ!', 'success');
-    writeLog('Phát Push Alert Điều phối');
-  };
+  const communitiesArray = Array.isArray(communities) ? communities : [];
+  const postsArray = Array.isArray(posts) ? posts : [];
+  const usersArray = Array.isArray(users) ? users : [];
+  const activeGroupsCount = communitiesArray.filter((c: any) => ['APPROVED', 'Approved', 'active', 'ACTIVE', undefined, null].includes(c?.status)).length;
+  const pendingGroupsCount = communitiesArray.filter((c: any) => c?.status === 'PENDING_APPROVAL').length;
+  const rejectedGroupsCount = communitiesArray.filter((c: any) => String(c?.status || '').toUpperCase() === 'REJECTED').length;
+  const topGroup = communitiesArray
+    .map((c: any) => ({ ...c, memberCount: Array.isArray(c?.members) ? c.members.length : Number(c?.membersCount || 0) }))
+    .sort((a: any, b: any) => Number(b?.memberCount || 0) - Number(a?.memberCount || 0))[0];
+  const activeEngineersCount = usersArray.filter((u: any) => String(u?.role || '').toLowerCase() === 'business' && String(u?.businessType || '').toLowerCase() === 'engineer' && String(u?.status || '').toLowerCase() === 'active').length;
+  const activeMerchantsCount = usersArray.filter((u: any) => String(u?.role || '').toLowerCase() === 'business' && String(u?.businessType || '').toLowerCase() === 'merchant' && String(u?.status || '').toLowerCase() === 'active').length;
+  const totalBusinessCount = activeEngineersCount + activeMerchantsCount;
 
-  const getRankBadge = (index: number) => {
-    if (index === 0) return <span className="text-2xl drop-shadow-md inline-block transform hover:scale-110 transition">🥇</span>;
-    if (index === 1) return <span className="text-2xl drop-shadow-md inline-block transform hover:scale-110 transition">🥈</span>;
-    if (index === 2) return <span className="text-2xl drop-shadow-md inline-block transform hover:scale-110 transition">🥉</span>;
-    return <span className="font-bold text-gray-400 w-8 text-center inline-block">#{index + 1}</span>;
-  };
+  const postCategoryMap = postsArray.reduce((acc: Record<string, number>, post: any) => {
+    const category = String(post?.category || 'Khác').trim() || 'Khác';
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {});
+  const postCategoryData = Object.keys(postCategoryMap)
+    .map((name) => ({ name, value: postCategoryMap[name] }))
+    .sort((a, b) => b.value - a.value);
 
-  const renderAnalyticsRows = () => {
-    if (analyticsFilter === 'top_stores') {
-       const sortedStores = [...stores].sort((a:any, b:any) => (b.rating||0) - (a.rating||0)).slice(0, 10);
-       if (!sortedStores.length) return <tr><td colSpan={5} className="p-6 text-center text-gray-500 italic">Chưa có dữ liệu gian hàng.</td></tr>;
-       return sortedStores.map((s:any, i:number) => (
-         <tr key={s.id} className="border-b hover:bg-blue-50/50 transition">
-           <td className="p-4 text-center w-16">{getRankBadge(i)}</td>
-           <td className="p-4 font-bold text-bme-primary text-base">{s.name}</td>
-           <td className="p-4"><span className="font-bold text-yellow-600 flex items-center gap-1"><Star size={16} className="fill-yellow-500"/> {s.rating}</span></td>
-           <td className="p-4 text-gray-600 font-semibold">{s.feedback_count || 0} lượt</td>
-           <td className="p-4 text-gray-500 text-sm max-w-[200px] truncate" title={s.address}><MapPin size={14} className="inline mr-1 opacity-50"/>{s.address || 'Chưa cập nhật'}</td>
-         </tr>
-       ));
-    }
-    if (analyticsFilter === 'most_saved') {
-       const counts: any = {};
-       users.forEach((u:any) => (u.savedPostIds||[]).forEach((id:string) => counts[id] = (counts[id]||0)+1));
-       const savedPosts = posts.map((p:any) => ({...p, saves: counts[p.id]||0})).filter((p:any)=>p.saves>0).sort((a:any,b:any)=>b.saves-a.saves).slice(0,10);
-       if (!savedPosts.length) return <tr><td colSpan={4} className="p-6 text-center text-gray-500 italic">Chưa có bài viết nào được lưu trữ.</td></tr>;
-       return savedPosts.map((p:any, i:number) => (
-         <tr key={p.id} className="border-b hover:bg-blue-50/50 transition">
-           <td className="p-4 text-center w-16">{getRankBadge(i)}</td>
-           <td className="p-4 font-bold text-gray-800">{p.author}</td>
-           <td className="p-4 max-w-sm truncate"><span className="bg-gray-100 border border-gray-200 px-2.5 py-1 rounded text-xs font-bold mr-2 text-gray-600">{p.category}</span> <span className="text-gray-700">{p.content}</span></td>
-           <td className="p-4"><span className="font-black text-bme-accent flex items-center gap-1.5"><Bookmark size={16} className="fill-bme-accent"/> {p.saves} lượt</span></td>
-         </tr>
-       ));
-    }
-    if (analyticsFilter === 'top_products') {
-       const productSales: any = {};
-       orders.filter((o:any) => ['Đang giao hàng', 'Đã hoàn thành'].includes(o.status)).forEach((o:any) => {
-         o.items.forEach((item:any) => {
-           if(!productSales[item.id]) productSales[item.id] = {...item, sold: 0, storeName: o.storeName};
-           productSales[item.id].sold += item.qty;
-         });
-       });
-       const topProducts = Object.values(productSales).sort((a:any,b:any)=>b.sold-a.sold).slice(0,10);
-       if (!topProducts.length) return <tr><td colSpan={4} className="p-6 text-center text-gray-500 italic">Chưa có dữ liệu sản phẩm bán ra.</td></tr>;
-       return topProducts.map((p:any, i:number) => (
-         <tr key={p.id} className="border-b hover:bg-blue-50/50 transition">
-           <td className="p-4 text-center w-16">{getRankBadge(i)}</td>
-           <td className="p-4 font-bold text-gray-800">{p.name}</td>
-           <td className="p-4 text-bme-primary font-semibold"><Store size={14} className="inline mr-1 opacity-50"/>{p.storeName}</td>
-           <td className="p-4"><span className="font-black text-green-600 flex items-center gap-1.5 bg-green-50 px-3 py-1 rounded-full w-max"><Package size={16}/> {p.sold} đã bán</span></td>
-         </tr>
-       ));
-    }
-    if (analyticsFilter === 'active_members') {
-       const memberActivity: any = {};
-       users.forEach((u:any) => memberActivity[u.id] = {...u, score: 0});
-       posts.forEach((p:any) => { if(memberActivity[p.authorId]) memberActivity[p.authorId].score += 5; });
-       orders.forEach((o:any) => { if(memberActivity[o.buyerId]) memberActivity[o.buyerId].score += 2; });
-       const actives = Object.values(memberActivity).filter((u:any)=>u.score>0).sort((a:any,b:any)=>b.score-a.score).slice(0,10);
-       if (!actives.length) return <tr><td colSpan={4} className="p-6 text-center text-gray-500 italic">Hệ thống chưa ghi nhận tương tác.</td></tr>;
-       return actives.map((u:any, i:number) => (
-         <tr key={u.id} className="border-b hover:bg-blue-50/50 transition">
-           <td className="p-4 text-center w-16">{getRankBadge(i)}</td>
-           <td className="p-4 font-bold text-gray-800 flex items-center gap-3"><Avatar src={u.avatar} name={u.name} size={32} userId={u.id} /> {u.name}</td>
-           <td className="p-4"><span className="text-gray-500 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full uppercase text-[10px] font-black">{u.role}</span></td>
-           <td className="p-4"><span className="font-black text-orange-500 flex items-center gap-1.5 text-lg">🔥 {u.score} pts</span></td>
-         </tr>
-       ));
-    }
-  };
+  const topGroupsData = [...communitiesArray]
+    .map((group: any) => ({
+      id: group?.id,
+      name: String(group?.name || 'Nhóm chưa đặt tên'),
+      members: Array.isArray(group?.members) ? group.members.length : Number(group?.membersCount || 0)
+    }))
+    .sort((a, b) => b.members - a.members)
+    .slice(0, 5);
 
+  // =========================================================
+  // ADMIN DASHBOARD - Tập trung hỗ trợ người dùng + mật khẩu
+  // SUPERVISOR DASHBOARD - Tập trung kiểm tra chéo toàn sàn
+  // =========================================================
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap bg-white p-2 rounded shadow-sm border border-gray-200">
-        {isAdmin && <button onClick={()=>setTab('analytics_center')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='analytics_center'?'bg-bme-primary text-white shadow-lg':'hover:bg-gray-100 text-gray-700'}`}><BarChart size={18}/> Trung tâm Thống kê</button>}
-        {isAdmin && <button onClick={()=>setTab('heatmap')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='heatmap'?'bg-red-600 text-white shadow-lg':'hover:bg-gray-100 text-gray-700'}`}><MapPin size={18}/> Radar Map</button>}
-        {(isAdmin || isSupervisor) && <button onClick={()=>setTab('supervisor_panel')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='supervisor_panel'?'bg-bme-primary text-white shadow':'hover:bg-gray-100 text-gray-700'}`}><Shield size={18}/> Quản lý Bảng tin & User</button>}
-        {(isAdmin || isCoordinator) && <button onClick={()=>setTab('coordinator_panel')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='coordinator_panel'?'bg-bme-primary text-white shadow':'hover:bg-gray-100 text-gray-700'}`}><CheckCircle size={18}/> Duyệt Cộng đồng {Array.isArray(communities) && communities.filter((c:any)=>c.status==='PENDING_APPROVAL').length > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs">{communities.filter((c:any)=>c.status==='PENDING_APPROVAL').length}</span>}</button>}
-        {isAdmin && <button onClick={()=>setTab('admin_panel')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='admin_panel'?'bg-purple-600 text-white shadow':'hover:bg-gray-100 text-gray-700'}`}><AlertCircle size={18}/> Quản lý Cấp cao</button>}
-        {(isAdmin || isSupervisor) && <button onClick={()=>setTab('orders_panel')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='orders_panel'?'bg-bme-primary text-white shadow':'hover:bg-gray-100 text-gray-700'}`}><Package size={18}/> Giao dịch & Đơn hàng</button>}
-        {isAdmin && <button onClick={()=>setTab('logs')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='logs'?'bg-bme-primary text-white':'hover:bg-gray-100 text-gray-700'}`}><FileText size={18}/> System Logs</button>}
-        {isAdmin && <button onClick={()=>setTab('storage_panel')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='storage_panel'?'bg-emerald-600 text-white shadow-lg':'hover:bg-gray-100 text-gray-700'}`}><Database size={18}/> Quản lý Storage</button>}
+        {isAdmin && <button onClick={()=>setTab('admin_support')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='admin_support'?'bg-red-600 text-white shadow-lg':'hover:bg-gray-100 text-gray-700'}`}><Bell size={18}/> Hỗ trợ & Cấp lại Mật khẩu {adminNotifs.filter((n:any)=>n.status==='NEW').length>0 && <span className="bg-white text-red-600 px-2 py-0.5 rounded-full text-xs font-black animate-pulse">{adminNotifs.filter((n:any)=>n.status==='NEW').length}</span>}</button>}
         {isAdmin && <button onClick={()=>setTab('account_requests')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='account_requests'?'bg-blue-600 text-white shadow-lg':'hover:bg-gray-100 text-gray-700'}`}><User size={18}/> Duyệt Sửa Tài Khoản {changeRequests.filter((r:any)=>r.status==='PENDING').length > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs animate-pulse">{changeRequests.filter((r:any)=>r.status==='PENDING').length}</span>}</button>}
+        {isAdmin && <button onClick={()=>setTab('logs')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='logs'?'bg-bme-primary text-white':'hover:bg-gray-100 text-gray-700'}`}><FileText size={18}/> System Logs</button>}
+        {isSupervisor && <button onClick={()=>setTab('supervisor_inspection')} className={`px-4 py-2 rounded font-bold transition flex items-center gap-2 ${tab==='supervisor_inspection'?'bg-indigo-600 text-white shadow':'hover:bg-gray-100 text-gray-700'}`}><Shield size={18}/> Kiểm Tra Chéo Toàn Sàn</button>}
       </div>
-      
-      {tab === 'analytics_center' && isAdmin && (
+
+      {/* ====== ADMIN: HỖ TRỢ NGƯỜI DÙNG + CẤP LẠI MẬT KHẨU ====== */}
+      {tab === 'admin_support' && isAdmin && (
         <div className="space-y-6 animate-fade-in">
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 flex items-center justify-between hover:shadow-md transition">
-              <div>
-                <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Tổng Thành Viên Toàn Sàn</p>
-                <p className="text-4xl font-black text-bme-primary">{users.length}</p>
-              </div>
-              <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500"><Users size={28}/></div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-100 flex items-center justify-between hover:shadow-md transition">
-              <div>
-                <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Giao Dịch Thành Công</p>
-                <p className="text-4xl font-black text-green-600">{orders.filter((o:any) => ['Đang giao hàng', 'Đã hoàn thành'].includes(o.status)).length}</p>
-              </div>
-              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-100 flex items-center justify-center text-green-500"><TrendingUp size={28}/></div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 flex items-center justify-between hover:shadow-md transition">
-              <div>
-                <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Hội Nhóm Đã Phê Duyệt</p>
-                <p className="text-4xl font-black text-purple-600">{communities.filter((c:any) => c.status === 'Approved').length}</p>
-              </div>
-              <div className="w-14 h-14 rounded-full bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-500"><CheckCircle size={28}/></div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100 text-center"><p className="text-xs font-bold text-gray-500 uppercase">Tổng Users</p><p className="text-3xl font-black text-bme-primary mt-1">{users.length}</p></div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-100 text-center"><p className="text-xs font-bold text-gray-500 uppercase">Chờ duyệt TK</p><p className="text-3xl font-black text-yellow-600 mt-1">{changeRequests.filter((r:any)=>r.status==='PENDING').length}</p></div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-red-100 text-center"><p className="text-xs font-bold text-gray-500 uppercase">Thông báo mới</p><p className="text-3xl font-black text-red-600 mt-1">{adminNotifs.filter((n:any)=>n.status==='NEW').length}</p></div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-green-100 text-center"><p className="text-xs font-bold text-gray-500 uppercase">Tin hỗ trợ</p><p className="text-3xl font-black text-green-600 mt-1">{supportMessages.length}</p></div>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-red-500">
+            <h4 className="font-bold text-lg text-red-800 mb-4 flex items-center gap-2"><Bell size={20} className="text-red-500"/> Trung tâm Thông báo Cấp lại Mật khẩu (Real-time)</h4>
+            <div className="space-y-3 max-h-72 overflow-y-auto bg-gray-50 p-3 rounded-lg border">
+              {adminNotifs.length === 0 && <p className="text-gray-500 text-sm italic text-center py-6">Chưa có yêu cầu quên mật khẩu nào.</p>}
+              {adminNotifs.map((n:any) => (
+                <div key={n.id} className={`flex items-start justify-between p-3 bg-white border rounded-lg shadow-sm ${n.status==='NEW'?'border-red-200 bg-red-50/30':'border-gray-100'}`}>
+                  <div><p className="font-semibold text-gray-800 text-sm">{n.message}</p><span className="text-xs text-gray-400 font-mono mt-1 block">{n.time}</span></div>
+                  {n.status==='NEW' && <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse shrink-0">MỚI</span>}
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Analytics Filter Center */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-            <h4 className="font-bold text-xl text-gray-800 mb-5 flex items-center gap-3"><BarChart size={28} className="text-bme-primary" /> Bảng Xếp Hạng & Phân Tích Thông Minh</h4>
-            <div className="flex flex-wrap gap-3 border-b border-gray-100 pb-5 mb-5">
-               <button onClick={()=>setAnalyticsFilter('top_stores')} className={`px-5 py-2.5 rounded-lg font-bold text-sm transition flex items-center gap-2 ${analyticsFilter==='top_stores' ? 'bg-bme-primary text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'}`}>⭐ Shop đánh giá cao nhất</button>
-               <button onClick={()=>setAnalyticsFilter('most_saved')} className={`px-5 py-2.5 rounded-lg font-bold text-sm transition flex items-center gap-2 ${analyticsFilter==='most_saved' ? 'bg-bme-primary text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'}`}>🔖 Bài viết được lưu nhiều nhất</button>
-               <button onClick={()=>setAnalyticsFilter('top_products')} className={`px-5 py-2.5 rounded-lg font-bold text-sm transition flex items-center gap-2 ${analyticsFilter==='top_products' ? 'bg-bme-primary text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'}`}>📦 Sản phẩm bán chạy nhất</button>
-               <button onClick={()=>setAnalyticsFilter('active_members')} className={`px-5 py-2.5 rounded-lg font-bold text-sm transition flex items-center gap-2 ${analyticsFilter==='active_members' ? 'bg-bme-primary text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'}`}><Users size={16}/> Thành viên tích cực nhất</button>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
-                  {analyticsFilter === 'top_stores' && <tr><th className="p-4 font-bold">Thứ hạng</th><th className="p-4 font-bold">Gian hàng doanh nghiệp</th><th className="p-4 font-bold">Điểm đánh giá</th><th className="p-4 font-bold">Lượt bình luận</th><th className="p-4 font-bold">Địa chỉ / Khu vực</th></tr>}
-                  {analyticsFilter === 'most_saved' && <tr><th className="p-4 font-bold">Thứ hạng</th><th className="p-4 font-bold">Người chia sẻ</th><th className="p-4 font-bold">Nội dung bài viết / Phân loại</th><th className="p-4 font-bold">Số lượt người dùng lưu</th></tr>}
-                  {analyticsFilter === 'top_products' && <tr><th className="p-4 font-bold">Thứ hạng</th><th className="p-4 font-bold">Tên sản phẩm thiết bị y tế</th><th className="p-4 font-bold">Phân phối bởi</th><th className="p-4 font-bold">Số lượng đã xuất kho</th></tr>}
-                  {analyticsFilter === 'active_members' && <tr><th className="p-4 font-bold">Thứ hạng</th><th className="p-4 font-bold">Hồ sơ thành viên</th><th className="p-4 font-bold">Vai trò hệ thống</th><th className="p-4 font-bold">Điểm hoạt động (Tích cực)</th></tr>}
-                </thead>
-                <tbody className="bg-white">
-                  {renderAnalyticsRows()}
+          <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-blue-500">
+            <h4 className="font-bold text-lg text-blue-800 mb-4 flex items-center gap-2"><MessageSquare size={20}/> Hộp thư Tin nhắn Hỗ trợ</h4>
+            {supportMessages.length === 0 ? <p className="text-gray-500 italic text-center py-6 bg-gray-50 border border-dashed border-gray-200 rounded-xl">Chưa có tin nhắn hỗ trợ nào.</p> : (
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {supportMessages.map((msg: any) => (
+                  <div key={msg.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <div className="flex justify-between items-start mb-1"><p className="font-bold text-gray-800">{msg.senderName||msg.senderPhone}</p><span className="text-xs text-gray-400">{msg.time}</span></div>
+                    <p className="text-sm text-gray-700">{msg.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-purple-500">
+            <h4 className="font-bold text-lg text-purple-800 mb-4 flex items-center gap-2"><Users size={20}/> Danh sách người dùng hệ thống</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 border-b"><tr><th className="p-3 font-bold">Tên</th><th className="p-3 font-bold">SĐT</th><th className="p-3 font-bold">Vai trò</th><th className="p-3 font-bold">Trạng thái</th></tr></thead>
+                <tbody>
+                  {users.filter((u:any)=>u.role!=='admin').map((u:any)=>(
+                    <tr key={u.id} className="border-b hover:bg-gray-50 transition">
+                      <td className="p-3 font-semibold text-gray-800">{u.name}</td>
+                      <td className="p-3 text-gray-600">{u.phone}</td>
+                      <td className="p-3"><span className="text-xs font-bold bg-gray-100 border px-2 py-0.5 rounded">{u.role}{u.businessType?` / ${u.businessType}`:''}</span></td>
+                      <td className="p-3"><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${u.status==='Banned'?'bg-red-100 text-red-700':u.status==='active'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{u.status==='Banned'?'BỊ CẤM':u.status==='active'?'Hoạt động':'Chờ duyệt'}</span></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -2066,159 +2072,15 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
         </div>
       )}
 
-      {tab==='heatmap' && isAdmin && (
-        <div className="bg-white p-6 rounded shadow border-t-4 border-red-500">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h4 className="font-bold text-xl text-gray-800">Bản đồ nhiệt (Heatmap Analytics)</h4>
-              <p className="text-sm text-gray-500 mt-1">Phân tích nhu cầu sửa chữa y tế và mật độ phân bổ Store theo thời gian thực.</p>
-            </div>
-            <button onClick={simulatePushAlert} className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md flex items-center gap-2 transition animate-pulse">🚀 Điều phối khẩn cấp</button>
-          </div>
-          <div className="relative w-full h-[400px] bg-slate-800 border rounded-xl overflow-hidden flex items-center justify-center">
-            {/* Grid background */}
-            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
-            
-            {/* Vùng đỏ 1 (Thiếu hụt) */}
-            <div className="absolute top-[20%] left-[25%] w-48 h-48 bg-red-500/50 rounded-full blur-[40px] animate-pulse"></div>
-            <div className="absolute top-[28%] left-[30%] bg-red-600 px-2 py-1 rounded text-[10px] text-white font-bold shadow">Nhu cầu cao</div>
-            
-            {/* Vùng đỏ 2 */}
-            <div className="absolute bottom-[20%] right-[30%] w-32 h-32 bg-orange-500/60 rounded-full blur-[30px] animate-pulse" style={{ animationDelay: '1s' }}></div>
-            
-            {/* Vùng xanh (Nhiều Store) */}
-            <div className="absolute top-[40%] left-[60%] w-64 h-64 bg-green-500/30 rounded-full blur-[50px]"></div>
-            
-            <div className="absolute bottom-4 left-4 bg-white p-3 rounded-lg text-xs shadow-lg border">
-              <p className="font-bold mb-2 border-b pb-1 text-gray-700">Chú giải</p>
-              <div className="flex items-center gap-2"><span className="w-3 h-3 bg-red-500 rounded-full shadow"></span> Điểm nóng (Cần kỹ thuật viên)</div>
-              <div className="flex items-center gap-2 mt-1.5"><span className="w-3 h-3 bg-green-500 rounded-full shadow"></span> Mật độ Store an toàn</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab==='supervisor_panel' && (isSupervisor || isAdmin) && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded shadow border-t-4 border-blue-500">
-            <h4 className="font-bold text-lg mb-4 flex items-center gap-2"><Shield size={20}/> Quản lý Người dùng (Cấm)</h4>
-            <div className="space-y-3">
-              {users.filter((u:any) => u.role !== 'admin').map((u:any)=>(
-                <div key={u.id} className="flex items-center justify-between p-3 bg-gray-50 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Avatar src={u.avatar} name={u.name} size={40} userId={u.id} />
-                    <div>
-                      <p className="font-semibold text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-500 uppercase font-bold">{u.role} • {u.phone} • {u.status === 'Banned' ? 'ĐÃ BỊ CẤM' : 'Hoạt động'}</p>
-                    </div>
-                  </div>
-                  {u.status !== 'Banned' ? (
-                    <button onClick={()=>banUser(u.id)} className="px-4 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded text-sm font-bold shadow">Cấm tài khoản</button>
-                  ) : (
-                    <span className="px-4 py-1.5 bg-gray-200 text-gray-600 rounded text-sm font-bold flex items-center gap-1"><Lock size={14}/> Đã cấm</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-white p-6 rounded shadow border-t-4 border-orange-500">
-            <h4 className="font-bold text-lg mb-4 flex items-center gap-2"><Eye size={20}/> Quản lý Bảng tin (Xóa bài)</h4>
-            <div className="space-y-3">
-              {posts.length === 0 && <p className="text-gray-500 italic py-4 text-center">Không có bài viết nào.</p>}
-              {posts.map((p:any)=>(
-                <div key={p.id} className="p-4 border rounded-lg flex items-start justify-between bg-white">
-                  <div>
-                    <div className="flex gap-2 mb-1"><span className="text-xs font-bold px-2 py-0.5 bg-gray-200 rounded">{p.category}</span><span className="text-xs text-gray-500">{p.time}</span></div>
-                    <p className="font-bold text-gray-800">{p.author}</p>
-                    <p className="text-sm text-gray-700 mt-1">{p.content}</p>
-                  </div>
-                  <button onClick={()=>deletePost(p.id)} className="px-4 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded text-sm whitespace-nowrap">Xóa bài vi phạm</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {tab==='coordinator_panel' && (isCoordinator || isAdmin) && (
-        <div className="bg-white p-6 rounded shadow border-t-4 border-green-500">
-          <h4 className="font-bold text-lg mb-4 flex items-center gap-2"><CheckCircle size={20}/> Danh sách nhóm chờ khởi tạo</h4>
-          <div className="space-y-3">
-            {(!Array.isArray(communities) || communities.filter((c:any) => c.status === 'PENDING_APPROVAL').length === 0) && <p className="text-gray-500 italic py-4 text-center">Không có nhóm nào đang chờ duyệt.</p>}
-            {Array.isArray(communities) && communities.filter((c:any) => c.status === 'PENDING_APPROVAL').map((c:any)=>(
-              <div key={c.id} className="p-4 border border-yellow-200 rounded-lg flex items-start justify-between bg-yellow-50">
-                <div>
-                  <h5 className="font-bold text-gray-800 text-lg">{c.name}</h5>
-                  <p className="text-sm text-gray-600 mt-1 mb-2">{c.description}</p>
-                  <span className="text-xs bg-white border px-2 py-1 rounded font-bold">Chuyên khoa: {c.specialty || 'Chung'}</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <button onClick={()=>approveCommunity(c.id)} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded text-sm shadow">Phê duyệt</button>
-                  <button onClick={()=>rejectCommunity(c.id)} className="px-5 py-2 bg-white border border-red-500 text-red-600 hover:bg-red-50 font-bold rounded text-sm">Từ chối</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tab==='admin_panel' && isAdmin && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded shadow border-t-4 border-red-500">
-            <h4 className="font-bold text-lg mb-4 text-red-800 flex items-center gap-2"><AlertCircle size={20}/> Trung tâm Thông báo Cấp lại Mật khẩu tự động</h4>
-            <div className="space-y-3 max-h-60 overflow-y-auto bg-gray-50 p-4 rounded-lg border border-gray-200">
-              {adminNotifs.length === 0 && <p className="text-gray-500 text-sm italic">Không có thông báo hệ thống nào.</p>}
-              {adminNotifs.map((n:any) => (
-                <div key={n.id} className="flex items-center justify-between p-3 bg-white border border-red-100 rounded-lg shadow-sm">
-                  <p className="font-semibold text-gray-800">{n.message}</p>
-                  <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">{n.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded shadow border-t-4 border-purple-500">
-            <h4 className="font-bold text-lg mb-4 text-purple-800">Can thiệp Người dùng bị cấm</h4>
-            <div className="space-y-3">
-              {users.filter((u:any) => u.status === 'Banned').length === 0 && <p className="text-gray-500 text-sm">Không có tài khoản nào đang bị cấm.</p>}
-              {users.filter((u:any) => u.status === 'Banned').map((u:any)=>(
-                <div key={u.id} className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="font-semibold text-gray-800">{u.name} - {u.phone}</p>
-                  <button onClick={()=>unbanUser(u.id)} className="px-4 py-1.5 bg-green-600 text-white hover:bg-green-700 rounded text-sm font-bold shadow">Mở khóa</button>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-white p-6 rounded shadow border-t-4 border-purple-500">
-            <h4 className="font-bold text-lg mb-4 text-purple-800">Quản lý toàn bộ Hội nhóm</h4>
-            <div className="space-y-3">
-              {communities.filter((c:any) => c.status === 'Approved').length === 0 && <p className="text-gray-500 text-sm">Không có nhóm nào.</p>}
-              {communities.filter((c:any) => c.status === 'Approved').map((c:any)=>(
-                <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <div>
-                    <p className="font-bold text-gray-800">{c.name}</p>
-                    <p className="text-xs text-gray-500">{c.membersCount} thành viên</p>
-                  </div>
-                  <button onClick={()=>deleteCommunity(c.id)} className="px-4 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded text-sm font-bold shadow">Gỡ nhóm</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* ====== ADMIN: DUYỆT SỬA TÀI KHOẢN OTP ====== */}
       {tab==='account_requests' && isAdmin && (
-        <div className="bg-white p-6 rounded shadow border-t-4 border-blue-600 animate-fade-in">
+        <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-blue-600 animate-fade-in">
           <h4 className="font-bold text-xl mb-6 text-gray-800 flex items-center gap-2">
-            <User size={24} className="text-blue-600" /> 
-            TRUNG TÂM PHÊ DUYỆT THAY ĐỔI THÔNG TIN TÀI KHOẢN (Đang chờ: {changeRequests.filter((r:any)=>r.status==='PENDING').length})
+            <User size={24} className="text-blue-600"/> TRUNG TÂM PHÊ DUYỆT YÊU CẦU THAY ĐỔI BẢO MẬT — Đang chờ: {changeRequests.filter((r:any)=>r.status==='PENDING').length}
           </h4>
           <div className="space-y-4">
-            {changeRequests.filter((r:any)=>r.status==='PENDING').length === 0 && (
-              <p className="text-gray-500 italic py-8 text-center bg-gray-50 border border-dashed border-gray-200 rounded-xl">Không có yêu cầu cập nhật tài khoản nào đang chờ.</p>
-            )}
-            {changeRequests.filter((r:any)=>r.status==='PENDING').map((req:any) => (
+            {changeRequests.filter((r:any)=>r.status==='PENDING').length===0 && <p className="text-gray-500 italic py-8 text-center bg-gray-50 border border-dashed border-gray-200 rounded-xl">Không có yêu cầu cập nhật tài khoản nào đang chờ.</p>}
+            {changeRequests.filter((r:any)=>r.status==='PENDING').map((req:any)=>(
               <div key={req.id} className="border border-blue-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex justify-between items-center">
                   <span className="font-bold text-blue-800">Yêu cầu từ SĐT: {req.userPhone}</span>
@@ -2227,28 +2089,23 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 p-0">
                   <div className="p-4 border-r border-gray-200 bg-gray-50/50">
                     <h5 className="font-bold text-gray-600 mb-3 text-sm uppercase">Thông tin Cũ</h5>
-                    <ul className="text-sm space-y-2 text-gray-600">
-                      <li>Tên: <strong>{req.oldData.name}</strong></li>
-                      <li>Mật khẩu: <strong>{req.oldData.password}</strong></li>
-                      <li>SĐT: <strong>{req.oldData.phone}</strong></li>
-                      <li>CCCD: <strong>{req.oldData.cccd || 'Trống'}</strong></li>
-                      <li>MST: <strong>{req.oldData.taxId || 'Trống'}</strong></li>
-                      <li>Vai trò: <strong>{req.oldData.role}</strong></li>
+                    <ul className="text-sm space-y-1.5 text-gray-600">
+                      <li>SĐT: <strong>{req.oldData?.phone || 'N/A'}</strong></li>
+                      <li>Mật khẩu: <strong>••••••••</strong></li>
+                      <li>CCCD: <strong>{req.oldData?.cccd||'Trống'}</strong></li>
+                      <li>MST: <strong>{req.oldData?.taxId||'Trống'}</strong></li>
                     </ul>
                   </div>
-                  <div className="p-4 bg-white relative">
-                    <h5 className="font-bold text-blue-600 mb-3 text-sm uppercase">Thông tin Mới đề xuất</h5>
-                    <ul className="text-sm space-y-2 text-gray-800">
-                      <li>Tên: <strong className={req.newData.name !== req.oldData.name ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.name}</strong></li>
-                      <li>Mật khẩu: <strong className={req.newData.password !== req.oldData.password ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.password}</strong></li>
-                      <li>SĐT: <strong className={req.newData.phone !== req.oldData.phone ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.phone}</strong></li>
-                      <li>CCCD: <strong className={req.newData.cccd !== req.oldData.cccd ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.cccd || 'Trống'}</strong></li>
-                      <li>MST: <strong className={req.newData.taxId !== req.oldData.taxId ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.taxId || 'Trống'}</strong></li>
-                      <li>Vai trò: <strong className={req.newData.role !== req.oldData.role ? 'text-red-600 bg-red-50 px-1 rounded' : ''}>{req.newData.role}</strong></li>
+                  <div className="p-4 bg-white">
+                    <h5 className="font-bold text-blue-600 mb-3 text-sm uppercase">Thông tin bảo mật mới đề xuất</h5>
+                    <ul className="text-sm space-y-1.5 text-gray-800 mb-4">
+                      <li>Mật khẩu: <strong className={req.newData?.password!==req.oldData?.password?'text-red-600 bg-red-50 px-1 rounded':''}>{req.newData?.password ? 'Đã thay đổi' : 'Giữ nguyên'}</strong></li>
+                      <li>CCCD: <strong className={req.newData?.cccd!==req.oldData?.cccd?'text-red-600 bg-red-50 px-1 rounded':''}>{req.newData?.cccd||'Trống'}</strong></li>
+                      <li>MST: <strong className={req.newData?.taxId!==req.oldData?.taxId?'text-red-600 bg-red-50 px-1 rounded':''}>{req.newData?.taxId||'Trống'}</strong></li>
                     </ul>
-                    <div className="absolute top-4 right-4 flex flex-col gap-2">
-                      <button onClick={()=>approveAccountRequest(req)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1.5 px-4 rounded shadow-sm text-sm">PHÊ DUYỆT</button>
-                      <button onClick={()=>rejectAccountRequest(req.id)} className="bg-red-500 hover:bg-red-600 text-white font-bold py-1.5 px-4 rounded shadow-sm text-sm">TỪ CHỐI</button>
+                    <div className="flex gap-2">
+                      <button onClick={()=>approveAccountRequest(req)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-1.5 rounded shadow-sm text-sm">PHÊ DUYỆT</button>
+                      <button onClick={()=>rejectAccountRequest(req.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-1.5 rounded shadow-sm text-sm">TỪ CHỐI</button>
                     </div>
                   </div>
                 </div>
@@ -2257,58 +2114,179 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
           </div>
         </div>
       )}
-      
-      {tab==='orders_panel' && (isAdmin || isSupervisor) && (
-        <div className="bg-white p-6 rounded shadow border-t-4 border-blue-500">
-          <h4 className="font-bold text-lg mb-4 flex items-center gap-2"><Package size={20}/> BẢNG QUẢN LÝ ĐƠN HÀNG TOÀN SÀN</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
-              <thead>
-                <tr className="bg-gray-100 text-gray-600">
-                  <th className="p-3 border-b font-bold">Mã Đơn</th>
-                  <th className="p-3 border-b font-bold">Thời gian</th>
-                  <th className="p-3 border-b font-bold">Người mua</th>
-                  <th className="p-3 border-b font-bold">Gian hàng bán</th>
-                  <th className="p-3 border-b font-bold">Tổng tiền</th>
-                  <th className="p-3 border-b font-bold">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(!Array.isArray(orders) || orders.length === 0) && <tr><td colSpan={6} className="text-center p-6 text-gray-500 italic">Chưa có giao dịch nào diễn ra trên hệ thống</td></tr>}
-                {Array.isArray(orders) && orders.sort((a:any,b:any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((o:any) => (
-                  <tr key={o.id} className="hover:bg-gray-50 transition border-b border-gray-100 last:border-0">
-                    <td className="p-3 font-bold text-gray-800">{o.id}</td>
-                    <td className="p-3 text-gray-500 text-xs font-semibold">{o.timestamp}</td>
-                    <td className="p-3 text-gray-800 font-semibold">{o.buyerName} <span className="text-gray-500 font-normal block text-xs">{o.buyerPhone}</span></td>
-                    <td className="p-3 text-bme-primary font-bold hover:underline cursor-pointer" onClick={()=>document.dispatchEvent(new CustomEvent('openStore', {detail: o.storeId}))}>{o.storeName}</td>
-                    <td className="p-3 font-bold text-red-600 text-base">{o.totalPrice.toLocaleString()}đ</td>
-                    <td className="p-3">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${o.status === 'Chờ xác nhận' ? 'bg-yellow-100 text-yellow-800' : o.status === 'Đang giao hàng' ? 'bg-blue-100 text-blue-800' : o.status === 'Đã hoàn thành' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{o.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
+      {/* ====== ADMIN: SYSTEM LOGS ====== */}
       {tab==='logs' && isAdmin && (
-        <div className="bg-white p-6 rounded shadow border-t-4 border-purple-500">
+        <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-purple-500">
           <h4 className="font-bold text-lg mb-4">Nhật ký Hệ thống (Audit Logs)</h4>
           <div className="bg-slate-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-xs text-green-400 space-y-2">
-            {logs.length === 0 && <p className="text-gray-500">Chưa có log hoạt động.</p>}
-            {logs.map((l:any) => (
+            {logs.length===0 && <p className="text-gray-500">Chưa có log hoạt động.</p>}
+            {logs.map((l:any)=>(
               <div key={l.id} className="border-b border-slate-800 pb-2">
-                <span className="text-gray-400">[{l.time}]</span> <span className="text-blue-400">[{l.role.toUpperCase()}]</span> <span className="text-yellow-400">{l.user}</span>: <span className="text-white">{l.action}</span>
+                <span className="text-gray-400">[{l.time}]</span> <span className="text-blue-400">[{String(l.role||'').toUpperCase()}]</span> <span className="text-yellow-400">{l.user}</span>: <span className="text-white">{l.action}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {tab === 'storage_panel' && isAdmin && (
-        <AdminStoragePanel logs={logs} writeLog={writeLog} />
+      {/* ====== SUPERVISOR: KIỂM TRA CHÉO TOÀN SÀN ====== */}
+      {tab==='supervisor_inspection' && isSupervisor && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h4 className="font-bold text-indigo-800 text-lg flex items-center gap-2"><Shield size={22}/> Công Cụ Kiểm Tra Chéo Toàn Sàn — Thanh tra & Bảo vệ hệ thống</h4>
+            <p className="text-indigo-600 text-sm mt-1">Supervisor có quyền xóa tối cao: xóa bài vi phạm, giải tán nhóm, xóa tài khoản vi phạm khỏi hệ thống.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div onClick={() => setActiveAnalytics('GROUPS')} className={`bg-white rounded-2xl p-5 border border-indigo-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'GROUPS' ? 'ring-2 ring-blue-500' : ''}`}>
+              <p className="text-xs font-bold text-indigo-600 uppercase">Nhóm cộng đồng</p>
+              <p className="text-2xl font-black text-gray-800 mt-1">{activeGroupsCount}</p>
+              <p className="text-xs text-gray-500 mt-1">Đang hoạt động • {pendingGroupsCount} nhóm chờ duyệt</p>
+            </div>
+            <div onClick={() => setActiveAnalytics('POSTS')} className={`bg-white rounded-2xl p-5 border border-blue-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'POSTS' ? 'ring-2 ring-blue-500' : ''}`}>
+              <p className="text-xs font-bold text-blue-600 uppercase">Tần suất bài đăng</p>
+              <p className="text-2xl font-black text-gray-800 mt-1">{postsArray.length}</p>
+              <p className="text-xs text-gray-500 mt-1">Tổng số bài trên toàn hệ thống</p>
+            </div>
+            <div onClick={() => setActiveAnalytics('TOP_GROUPS')} className={`bg-white rounded-2xl p-5 border border-amber-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'TOP_GROUPS' ? 'ring-2 ring-blue-500' : ''}`}>
+              <p className="text-xs font-bold text-amber-600 uppercase">Top nhóm nổi bật</p>
+              <p className="text-base font-black text-gray-800 mt-1 truncate">{topGroup?.name || 'Chưa có dữ liệu'}</p>
+              <p className="text-xs text-gray-500 mt-1">{Number(topGroup?.memberCount || 0)} thành viên</p>
+            </div>
+            <div onClick={() => setActiveAnalytics('BUSINESS')} className={`bg-white rounded-2xl p-5 border border-emerald-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'BUSINESS' ? 'ring-2 ring-blue-500' : ''}`}>
+              <p className="text-xs font-bold text-emerald-600 uppercase">Business đang hoạt động</p>
+              <p className="text-2xl font-black text-gray-800 mt-1">{totalBusinessCount}</p>
+              <p className="text-xs text-gray-500 mt-1">Kỹ sư: {activeEngineersCount} • Cửa hàng: {activeMerchantsCount}</p>
+            </div>
+          </div>
+
+          {activeAnalytics !== null && (
+            <div className="bg-white p-6 rounded-xl shadow-inner mt-6 border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h5 className="font-bold text-gray-800 text-lg">Chi tiết phân tích dữ liệu</h5>
+                <button onClick={() => setActiveAnalytics(null)} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold">Đóng phân tích ✕</button>
+              </div>
+
+              {activeAnalytics === 'GROUPS' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">So sánh số lượng nhóm theo trạng thái.</p>
+                  {[
+                    { label: 'Đang hoạt động', value: activeGroupsCount, color: 'bg-green-500' },
+                    { label: 'Chờ duyệt', value: pendingGroupsCount, color: 'bg-yellow-500' },
+                    { label: 'Bị từ chối', value: rejectedGroupsCount, color: 'bg-red-500' }
+                  ].map((item) => {
+                    const total = Math.max(activeGroupsCount + pendingGroupsCount + rejectedGroupsCount, 1);
+                    const width = Math.round((item.value / total) * 100);
+                    return (
+                      <div key={item.label}>
+                        <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.label}</span><span className="font-bold text-gray-800">{item.value}</span></div>
+                        <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden"><div className={`${item.color} h-full`} style={{ width: `${width}%` }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeAnalytics === 'POSTS' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">Phân bố bài đăng theo danh mục.</p>
+                  {postCategoryData.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">Chưa có dữ liệu bài đăng.</p>
+                  ) : (
+                    postCategoryData.map((item) => {
+                      const max = Math.max(...postCategoryData.map((d) => d.value), 1);
+                      const width = Math.round((item.value / max) * 100);
+                      return (
+                        <div key={item.name}>
+                          <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.name}</span><span className="font-bold text-gray-800">{item.value}</span></div>
+                          <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden"><div className="bg-blue-500 h-full" style={{ width: `${width}%` }} /></div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {activeAnalytics === 'TOP_GROUPS' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">Top 5 nhóm có số lượng thành viên cao nhất.</p>
+                  {topGroupsData.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">Chưa có dữ liệu nhóm.</p>
+                  ) : (
+                    topGroupsData.map((item, idx) => {
+                      const max = Math.max(...topGroupsData.map((d) => d.members), 1);
+                      const width = Math.round((item.members / max) * 100);
+                      return (
+                        <div key={item.id || item.name}>
+                          <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">#{idx + 1} {item.name}</span><span className="font-bold text-gray-800">{item.members} TV</span></div>
+                          <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden"><div className="bg-amber-500 h-full" style={{ width: `${width}%` }} /></div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {activeAnalytics === 'BUSINESS' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">Tỷ trọng Merchant và Engineer đang hoạt động.</p>
+                  {[
+                    { label: 'MERCHANT', value: activeMerchantsCount, color: 'bg-emerald-500' },
+                    { label: 'ENGINEER', value: activeEngineersCount, color: 'bg-cyan-500' }
+                  ].map((item) => {
+                    const total = Math.max(totalBusinessCount, 1);
+                    const percent = Math.round((item.value / total) * 100);
+                    return (
+                      <div key={item.label}>
+                        <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-gray-700">{item.label}</span><span className="font-bold text-gray-800">{item.value} ({percent}%)</span></div>
+                        <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden"><div className={`${item.color} h-full`} style={{ width: `${percent}%` }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="border border-red-100 rounded-xl p-4 bg-red-50/30 flex flex-col">
+              <h5 className="font-bold text-sm mb-3 text-red-700 flex items-center gap-1"><Trash2 size={16}/> Bài đăng ({posts.length})</h5>
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-80">
+                {posts.length===0 && <p className="text-xs text-gray-500 italic text-center py-4">Trống</p>}
+                {posts.map((p:any)=>(
+                  <div key={p.id} className="flex justify-between items-start bg-white p-2.5 rounded-lg shadow-sm border border-red-100 text-xs hover:border-red-300 transition">
+                    <div className="flex-1 min-w-0 pr-2"><p className="font-bold text-gray-800 truncate">{p.author}</p><p className="text-gray-500 truncate mt-0.5">{p.content}</p></div>
+                    <button onClick={()=>deletePost(p.id)} className="text-red-500 hover:text-white hover:bg-red-500 p-1.5 rounded transition shrink-0"><Trash2 size={14}/></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border border-orange-100 rounded-xl p-4 bg-orange-50/30 flex flex-col">
+              <h5 className="font-bold text-sm mb-3 text-orange-700 flex items-center gap-1"><Users size={16}/> Nhóm cộng đồng ({communities.length})</h5>
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-80">
+                {communities.length===0 && <p className="text-xs text-gray-500 italic text-center py-4">Trống</p>}
+                {communities.map((c:any)=>(
+                  <div key={c.id} className="flex justify-between items-start bg-white p-2.5 rounded-lg shadow-sm border border-orange-100 text-xs hover:border-orange-300 transition">
+                    <div className="flex-1 min-w-0 pr-2"><p className="font-bold text-gray-800 truncate">{c.name}</p><p className="text-gray-500">Trạng thái: {c.status}</p></div>
+                    <button onClick={()=>{const next=communities.filter((cc:any)=>cc.id!==c.id);setCommunities(next);safeSet('bme_communities',next);writeLog(`Supervisor giải tán nhóm: ${c.name}`);showToast('Đã xóa nhóm vi phạm','success');}} className="text-orange-500 hover:text-white hover:bg-orange-500 p-1.5 rounded transition shrink-0"><Trash2 size={14}/></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border border-purple-100 rounded-xl p-4 bg-purple-50/30 flex flex-col">
+              <h5 className="font-bold text-sm mb-3 text-purple-700 flex items-center gap-1"><User size={16}/> Tài khoản ({users.filter((u:any)=>u.role!=='admin').length})</h5>
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-80">
+                {users.filter((u:any)=>u.role!=='admin').length===0 && <p className="text-xs text-gray-500 italic text-center py-4">Trống</p>}
+                {users.filter((u:any)=>u.role!=='admin').map((u:any)=>(
+                  <div key={u.id} className="flex justify-between items-start bg-white p-2.5 rounded-lg shadow-sm border border-purple-100 text-xs hover:border-purple-300 transition">
+                    <div className="flex-1 min-w-0 pr-2"><p className="font-bold text-gray-800 truncate">{u.name}</p><p className="text-gray-500 truncate">{u.phone} • {u.role}</p></div>
+                    <button onClick={()=>{const next=users.filter((uu:any)=>uu.id!==u.id);setUsers(next);safeSet('bme_users',next);writeLog(`Supervisor xóa tài khoản: ${u.phone}`);showToast('Đã xóa tài khoản vi phạm','success');}} className="text-purple-500 hover:text-white hover:bg-purple-500 p-1.5 rounded transition shrink-0"><Trash2 size={14}/></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2426,7 +2404,7 @@ const AdminStoragePanel = ({ logs, writeLog }: any) => {
       </div>
     </div>
   );
-}
+};
 
 // ------------------ Chat Center (MỚI) ------------------
 export const ChatCenter = ({ currentUser, initialTarget = null }: { currentUser: any, initialTarget?: any }) => {
@@ -2810,6 +2788,22 @@ export const ServicesMarketplace = ({ currentUser }: { currentUser: any }) => {
     showToast('Đã tiếp nhận ca bệnh máy. Vui lòng liên hệ ngay khách hàng!', 'success');
   };
 
+  const handleOpenRealtimeChat = (target: any) => {
+    if (!currentUser?.phone) {
+      showToast('Vui lòng đăng nhập để nhắn tin trao đổi', 'error');
+      return;
+    }
+    if (!target?.phone) {
+      showToast('Không tìm thấy thông tin liên hệ để mở chat', 'error');
+      return;
+    }
+    if (target?.phone === currentUser?.phone) {
+      showToast('Bạn đang xem hồ sơ của chính mình', 'info');
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('openChat', { detail: target }));
+  };
+
   const pendingEmergencyCases = emergencyCases.filter((item: any) => item?.status === 'PENDING');
   const myAcceptedCases = emergencyCases.filter((item: any) => item?.acceptedById === engineerId);
   const monthCases = myAcceptedCases.filter((item: any) => {
@@ -2965,9 +2959,11 @@ export const ServicesMarketplace = ({ currentUser }: { currentUser: any }) => {
                 <p className="text-sm text-gray-600 mt-2">Chuyên môn: {Array.isArray(svc?.specialties) ? svc.specialties.join(', ') : String(svc?.specialties || 'Chưa cập nhật')}</p>
                 <p className="text-sm text-gray-600 mt-1">Kinh nghiệm: {Number(svc?.yearsExperience || 0)} năm</p>
                 <p className="text-sm text-gray-600 mt-1">Khu vực hỗ trợ: {svc?.supportArea || 'Chưa cập nhật'}</p>
+                <p className="text-sm text-gray-600 mt-1 flex items-center gap-1.5"><MapPin size={14} className="text-gray-400"/> {svc?.supportArea || 'Chưa cập nhật khu vực hoạt động'}</p>
+                <p className="text-sm mt-2 flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span><span className="text-green-600 font-bold">Đang hoạt động</span></p>
                 <div className="mt-3 pt-2 border-t border-gray-100 flex justify-between items-center">
                   <p className="font-black text-bme-accent">{Number(svc?.servicePrice || 0).toLocaleString()}đ</p>
-                  <button onClick={() => document.dispatchEvent(new CustomEvent('openChat', {detail: {id: svc?.engineerId, name: svc?.engineerName, phone: svc?.engineerPhone}}))} className="text-xs font-bold px-3 py-1.5 rounded bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white transition">Liên hệ</button>
+                  <button onClick={() => handleOpenRealtimeChat({ id: svc?.engineerId, name: svc?.engineerName, phone: svc?.engineerPhone, role: 'business', businessType: 'engineer' })} className="text-xs font-bold px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1"><MessageCircle size={14}/> Nhắn tin trao đổi</button>
                 </div>
               </div>
             ))}
@@ -2994,7 +2990,7 @@ export const ServicesMarketplace = ({ currentUser }: { currentUser: any }) => {
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                   <p className="text-bme-accent font-bold">{svc.price.toLocaleString()}đ</p>
-                  <button onClick={() => document.dispatchEvent(new CustomEvent('openChat', {detail: {id: svc.engineerId, name: svc.engineerName, phone: svc.engineerPhone}}))} className="text-xs font-bold px-3 py-1.5 rounded bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white transition">Liên hệ</button>
+                  <button onClick={() => handleOpenRealtimeChat({ id: svc?.engineerId, name: svc?.engineerName, phone: svc?.engineerPhone, role: 'business', businessType: 'engineer' })} className="text-xs font-bold px-3 py-1.5 rounded bg-blue-50 text-bme-primary hover:bg-bme-primary hover:text-white transition">Liên hệ</button>
                 </div>
               </div>
             ))}
@@ -3011,6 +3007,7 @@ export const ServicesMarketplace = ({ currentUser }: { currentUser: any }) => {
                   <div className="flex-1">
                     <p className="font-bold text-gray-800 group-hover:text-bme-primary transition text-lg leading-tight">{t.name}</p>
                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${t.role === 'coordinator' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{t.role === 'coordinator' ? 'Chuyên gia' : 'Kỹ sư sửa chữa'}</span>
+                    <p className="text-xs mt-2 flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span><span className="text-green-600 font-bold">Đang hoạt động</span></p>
                   </div>
                 </div>
                 <div className="text-sm text-gray-600 space-y-1 mb-4 flex-1">
@@ -3020,7 +3017,7 @@ export const ServicesMarketplace = ({ currentUser }: { currentUser: any }) => {
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
                   <button onClick={() => document.dispatchEvent(new CustomEvent('viewProfile', {detail: t.id}))} className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm font-bold rounded-lg border border-gray-200 transition">Xem hồ sơ</button>
                   {currentUser?.id !== t.id && (
-                    <button onClick={() => document.dispatchEvent(new CustomEvent('openChat', {detail: t}))} className="flex-1 py-2 bg-blue-50 hover:bg-bme-primary hover:text-white text-bme-primary text-sm font-bold rounded-lg transition">Nhắn tin</button>
+                    <button onClick={() => handleOpenRealtimeChat({ id: t?.id, name: t?.name, phone: t?.phone, role: t?.role, businessType: t?.businessType })} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition flex items-center justify-center gap-1"><MessageCircle size={14}/> Nhắn tin trao đổi</button>
                   )}
                 </div>
               </div>
