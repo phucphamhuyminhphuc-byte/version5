@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Mic, Camera, LayoutGrid, MapPin, Users, Store, Settings, LogOut, Menu, X, Bell,
-  ShoppingCart, ShoppingBag, Send, User as UserIcon, User, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Home, Wrench, CheckCircle, Check,
+  ShoppingCart, ShoppingBag, Send, User as UserIcon, User, MessageSquare, MessageCircle, Bookmark, ChevronLeft, ChevronRight, Home, Wrench, CheckCircle, Check,
   AlertCircle, Package, Folder, FileText, Image as ImageIcon, Plus, Share2, FileDown, Star, ChevronDown, Filter, SlidersHorizontal, ArrowUpDown, ArrowLeft,
   FolderOpen, PlusCircle, Shield, Eye, Lock, Upload, Database, Trash2, AlertTriangle, BarChart, TrendingUp, Server, Tag 
 } from 'lucide-react';
@@ -1469,6 +1469,52 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
 export default function BmeStationeryApp() {
   // 1. STATE QUẢN LÝ ĐIỀU HƯỚNG MÀN HÌNH CHÍNH
   const [currentTab, setCurrentTab] = useState('HOME');
+  const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
+  const [floatingChatInput, setFloatingChatInput] = useState('');
+  const [chatContacts] = useState<{ id: string; name: string; role: string; avatar: string; preview: string; unread: number }[]>([
+    {
+      id: 'chat_store',
+      name: 'Cửa Hàng Yvj8',
+      role: 'Nhà cung cấp',
+      avatar: 'https://i.pravatar.cc/100?u=chat_store',
+      preview: 'Bên mình còn bo mạch PB840 chính hãng nhé.',
+      unread: 2
+    },
+    {
+      id: 'chat_engineer',
+      name: 'Kỹ sư Đức An',
+      role: 'Kỹ sư sửa chữa',
+      avatar: 'https://i.pravatar.cc/100?u=chat_engineer',
+      preview: 'Máy của bạn khả năng bị lỗi nguồn đầu vào.',
+      unread: 0
+    },
+    {
+      id: 'chat_coordinator',
+      name: 'Điều phối viên BME',
+      role: 'Hỗ trợ cộng đồng',
+      avatar: 'https://i.pravatar.cc/100?u=chat_coordinator',
+      preview: 'Bạn đã gửi yêu cầu tham gia cộng đồng thành công.',
+      unread: 1
+    },
+    {
+      id: 'chat_support',
+      name: 'Trung tâm CSKH',
+      role: 'Hỗ trợ hệ thống',
+      avatar: 'https://i.pravatar.cc/100?u=chat_support',
+      preview: 'Bạn cần hỗ trợ thêm về đơn hàng không ạ?',
+      unread: 0
+    }
+  ]);
+  const [activeChat, setActiveChat] = useState('chat_store');
+  const [floatingMessages, setFloatingMessages] = useState<{ id: number; chatId: string; text: string; from: 'me' | 'them'; time: string }[]>([
+    { id: 1, chatId: 'chat_store', text: 'Bên mình còn bo mạch PB840 chính hãng nhé.', from: 'them', time: '09:00' },
+    { id: 2, chatId: 'chat_store', text: 'Giá hiện tại và thời gian giao thế nào ạ?', from: 'me', time: '09:01' },
+    { id: 3, chatId: 'chat_store', text: 'Khoảng 2 ngày là nhận hàng tại TP.HCM.', from: 'them', time: '09:02' },
+    { id: 4, chatId: 'chat_engineer', text: 'Máy của bạn khả năng bị lỗi nguồn đầu vào.', from: 'them', time: '08:30' },
+    { id: 5, chatId: 'chat_engineer', text: 'Mình có thể qua kiểm tra trực tiếp chiều nay.', from: 'them', time: '08:31' },
+    { id: 6, chatId: 'chat_coordinator', text: 'Bạn đã gửi yêu cầu tham gia cộng đồng thành công.', from: 'them', time: '07:50' },
+    { id: 7, chatId: 'chat_support', text: 'Bạn cần hỗ trợ thêm về đơn hàng không ạ?', from: 'them', time: '07:10' }
+  ]);
   
   // 2. STATE GIAO DIỆN & TÀI KHOẢN
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -1517,7 +1563,7 @@ export default function BmeStationeryApp() {
     const role = String(user?.role || '').toUpperCase();
     if (role === 'ADMIN') return 'ADMIN_DASHBOARD';
     if (role === 'SUPERVISOR') return 'SUPERVISOR_DASHBOARD';
-    return 'FEED';
+    return 'HOME';
   };
 
   // 4. STATE CHO CHỢ THIẾT BỊ (MARKET) TÍCH HỢP TRỰC TIẾP ĐỂ TRÁNH LỖI UNDEFINED COMPONENT
@@ -1933,6 +1979,15 @@ export default function BmeStationeryApp() {
     setShowSearchDropdown(false);
   };
 
+  const handleSendFloatingMessage = () => {
+    const message = floatingChatInput.trim();
+    if (!message) return;
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setFloatingMessages((prev) => [...prev, { id: Date.now(), chatId: activeChat, text: message, from: 'me', time }]);
+    setFloatingChatInput('');
+  };
+
   // Render Dropdown Tìm kiếm
   const renderSearchDropdown = () => {
     if (!showSearchDropdown || !searchQuery) return null;
@@ -2115,6 +2170,17 @@ export default function BmeStationeryApp() {
                 title="Tìm bằng hình ảnh"
               >
                 <Camera size={20} />
+              </button>
+
+              <button
+                onClick={() => setIsChatBoxOpen(!isChatBoxOpen)}
+                className="relative bg-white hover:bg-blue-100 text-gray-600 rounded-full p-2 transition-colors"
+                title="Tin nhắn nhanh"
+              >
+                <MessageCircle size={20} />
+                {unreadMsgCount > 0 && (
+                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+                )}
               </button>
 
               {/* NOTIFICATION POPUP */}
@@ -2483,6 +2549,104 @@ export default function BmeStationeryApp() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {isChatBoxOpen && (
+        <div className="fixed bottom-6 right-6 w-[700px] h-[550px] z-50 rounded-2xl shadow-2xl flex flex-row overflow-hidden border border-gray-200 bg-white">
+          <aside className="w-[35%] border-r border-gray-200 bg-gray-50 flex flex-col">
+            <div className="px-4 py-4 border-b border-gray-200 bg-white">
+              <h3 className="font-bold text-gray-800 text-lg">Đoạn chat</h3>
+              <p className="text-xs text-gray-500 mt-1">Trao đổi nhanh với đối tác và kỹ sư</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+              {chatContacts.map((contact) => (
+                <button
+                  key={contact.id}
+                  onClick={() => setActiveChat(contact.id)}
+                  className={`w-full text-left p-3 rounded-xl transition-all border ${
+                    activeChat === contact.id
+                      ? 'bg-blue-100 border-l-4 border-blue-600 border-blue-200 shadow-sm'
+                      : 'bg-white border-gray-200 hover:bg-blue-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <img src={contact.avatar} alt={contact.name} className="w-11 h-11 rounded-full object-cover border border-gray-200" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-bold text-sm text-gray-800 truncate">{contact.name}</p>
+                        {contact.unread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white font-bold">{contact.unread}</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{contact.role}</p>
+                      <p className="text-xs text-gray-600 truncate mt-1">{contact.preview}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="flex-1 flex flex-col bg-white">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-3">
+                <img
+                  src={chatContacts.find((contact) => contact.id === activeChat)?.avatar || 'https://i.pravatar.cc/100?u=fallback_chat'}
+                  alt={chatContacts.find((contact) => contact.id === activeChat)?.name || 'Đoạn chat'}
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                />
+                <div>
+                  <p className="font-bold text-gray-800">{chatContacts.find((contact) => contact.id === activeChat)?.name || 'Đoạn chat'}</p>
+                  <p className="text-xs text-gray-500">{chatContacts.find((contact) => contact.id === activeChat)?.role || 'Hỗ trợ nhanh'}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChatBoxOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition"
+                title="Đóng hộp chat"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+              {floatingMessages.filter((msg) => msg.chatId === activeChat).map((msg) => (
+                <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[78%] px-4 py-2.5 text-sm shadow-sm ${
+                      msg.from === 'me'
+                        ? 'bg-blue-600 text-white rounded-bl-3xl rounded-tl-3xl rounded-tr-3xl'
+                        : 'bg-gray-200 text-gray-800 rounded-br-3xl rounded-tr-3xl rounded-tl-3xl'
+                    }`}
+                  >
+                    <p className="leading-relaxed">{msg.text}</p>
+                    <p className={`text-[10px] mt-1 ${msg.from === 'me' ? 'text-blue-100' : 'text-gray-500'}`}>{msg.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-white flex items-center gap-2">
+              <input
+                value={floatingChatInput}
+                onChange={(e) => setFloatingChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendFloatingMessage();
+                  }
+                }}
+                placeholder="Nhập tin nhắn..."
+                className="flex-1 border border-gray-300 rounded-full px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+              <button
+                onClick={handleSendFloatingMessage}
+                className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition shadow-sm"
+                title="Gửi tin nhắn"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
