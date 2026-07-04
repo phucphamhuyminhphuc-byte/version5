@@ -1351,8 +1351,8 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
       </div>
 
       {/* 2. LƯỚI KHỐI CHỨC NĂNG TRUNG TÂM */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div onClick={() => setCurrentTab('FEED')} className="col-span-1 md:col-span-2 bg-gradient-to-br from-bme-primary to-bme-secondary p-8 rounded-2xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer flex flex-col justify-center text-white group h-full">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div onClick={() => setCurrentTab('FEED')} className="col-span-1 md:col-span-2 lg:col-span-2 bg-gradient-to-br from-bme-primary to-bme-secondary p-8 rounded-2xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer flex flex-col justify-center text-white group h-full">
           <LayoutGrid size={40} className="mb-3 text-white/80 group-hover:scale-110 transition-transform" />
           <h3 className="text-2xl font-bold uppercase">CỘNG ĐỒNG Y SINH</h3>
           <p className="mt-1 opacity-80">Khám phá bài viết, thảo luận và chia sẻ tài liệu chuyên môn.</p>
@@ -1368,11 +1368,6 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
           <AlertCircle size={40} className="mb-3 text-red-500 group-hover:scale-110 transition-transform" />
           <h3 className="text-2xl font-bold">Khẩn cấp</h3>
           <p className="mt-1 text-gray-600">Tìm kỹ thuật viên sửa chữa gần nhất.</p>
-        </div>
-        <div onClick={() => setCurrentTab('MESSAGES')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-gray-200 group">
-          <MessageSquare size={40} className="mb-3 text-green-500 group-hover:scale-110 transition-transform" />
-          <h3 className="text-2xl font-bold">Tin nhắn</h3>
-          <p className="mt-1 text-gray-600">Trao đổi trực tiếp với đối tác.</p>
         </div>
       {!isCoordinatorAccount && !isStrictMerchant && (
         <div onClick={() => setCurrentTab('SERVICES')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-lg transition-shadow cursor-pointer flex flex-col justify-center text-gray-800 border border-gray-200 group">
@@ -1467,54 +1462,29 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
 };
 
 export default function BmeStationeryApp() {
+  type ChatMessage = {
+    id: string;
+    senderPhone: string;
+    receiverPhone: string;
+    text: string;
+    timestamp: number;
+  };
+
+  type ChatContact = {
+    phone: string;
+    name: string;
+    role: string;
+    avatar: string;
+    preview: string;
+    lastTimestamp: number;
+  };
+
   // 1. STATE QUẢN LÝ ĐIỀU HƯỚNG MÀN HÌNH CHÍNH
   const [currentTab, setCurrentTab] = useState('HOME');
   const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
   const [floatingChatInput, setFloatingChatInput] = useState('');
-  const [chatContacts] = useState<{ id: string; name: string; role: string; avatar: string; preview: string; unread: number }[]>([
-    {
-      id: 'chat_store',
-      name: 'Cửa Hàng Yvj8',
-      role: 'Nhà cung cấp',
-      avatar: 'https://i.pravatar.cc/100?u=chat_store',
-      preview: 'Bên mình còn bo mạch PB840 chính hãng nhé.',
-      unread: 2
-    },
-    {
-      id: 'chat_engineer',
-      name: 'Kỹ sư Đức An',
-      role: 'Kỹ sư sửa chữa',
-      avatar: 'https://i.pravatar.cc/100?u=chat_engineer',
-      preview: 'Máy của bạn khả năng bị lỗi nguồn đầu vào.',
-      unread: 0
-    },
-    {
-      id: 'chat_coordinator',
-      name: 'Điều phối viên BME',
-      role: 'Hỗ trợ cộng đồng',
-      avatar: 'https://i.pravatar.cc/100?u=chat_coordinator',
-      preview: 'Bạn đã gửi yêu cầu tham gia cộng đồng thành công.',
-      unread: 1
-    },
-    {
-      id: 'chat_support',
-      name: 'Trung tâm CSKH',
-      role: 'Hỗ trợ hệ thống',
-      avatar: 'https://i.pravatar.cc/100?u=chat_support',
-      preview: 'Bạn cần hỗ trợ thêm về đơn hàng không ạ?',
-      unread: 0
-    }
-  ]);
-  const [activeChat, setActiveChat] = useState('chat_store');
-  const [floatingMessages, setFloatingMessages] = useState<{ id: number; chatId: string; text: string; from: 'me' | 'them'; time: string }[]>([
-    { id: 1, chatId: 'chat_store', text: 'Bên mình còn bo mạch PB840 chính hãng nhé.', from: 'them', time: '09:00' },
-    { id: 2, chatId: 'chat_store', text: 'Giá hiện tại và thời gian giao thế nào ạ?', from: 'me', time: '09:01' },
-    { id: 3, chatId: 'chat_store', text: 'Khoảng 2 ngày là nhận hàng tại TP.HCM.', from: 'them', time: '09:02' },
-    { id: 4, chatId: 'chat_engineer', text: 'Máy của bạn khả năng bị lỗi nguồn đầu vào.', from: 'them', time: '08:30' },
-    { id: 5, chatId: 'chat_engineer', text: 'Mình có thể qua kiểm tra trực tiếp chiều nay.', from: 'them', time: '08:31' },
-    { id: 6, chatId: 'chat_coordinator', text: 'Bạn đã gửi yêu cầu tham gia cộng đồng thành công.', from: 'them', time: '07:50' },
-    { id: 7, chatId: 'chat_support', text: 'Bạn cần hỗ trợ thêm về đơn hàng không ạ?', from: 'them', time: '07:10' }
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [activeChat, setActiveChat] = useState<ChatContact | null>(null);
   
   // 2. STATE GIAO DIỆN & TÀI KHOẢN
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -1788,6 +1758,9 @@ export default function BmeStationeryApp() {
     setCartItems([]);
     setNotifications([]);
     setChatTarget(null);
+    setIsChatBoxOpen(false);
+    setActiveChat(null);
+    setFloatingChatInput('');
     setViewingUserId(null);
     setViewingStoreId(null);
     localStorage.removeItem('bme_current_user');
@@ -1925,6 +1898,129 @@ export default function BmeStationeryApp() {
     return acc;
   }, {}) : {};
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem('chatMessages');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        const normalized = parsed.filter((msg: any) => msg && msg.senderPhone && msg.receiverPhone && typeof msg.text === 'string').map((msg: any) => ({
+          id: String(msg.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+          senderPhone: String(msg.senderPhone),
+          receiverPhone: String(msg.receiverPhone),
+          text: String(msg.text),
+          timestamp: Number(msg.timestamp || Date.now())
+        }));
+        setChatMessages(normalized);
+      } else {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error('Không thể đọc chatMessages từ localStorage:', error);
+      setChatMessages([]);
+    }
+  }, [currentUser?.phone]);
+
+  const allUsersForChat = safeGet('bme_users', []);
+  const usersForChat = Array.isArray(allUsersForChat) ? allUsersForChat : [];
+  const currentPhone = String(currentUser?.phone || '');
+
+  const chatContacts: ChatContact[] = (() => {
+    if (!currentPhone) return [];
+
+    const userByPhone = new Map<string, any>();
+    usersForChat.forEach((user: any) => {
+      if (user?.phone) userByPhone.set(String(user.phone), user);
+    });
+
+    const phoneSet = new Set<string>();
+    chatMessages.forEach((msg) => {
+      if (msg.senderPhone === currentPhone && msg.receiverPhone) {
+        phoneSet.add(String(msg.receiverPhone));
+      }
+      if (msg.receiverPhone === currentPhone && msg.senderPhone) {
+        phoneSet.add(String(msg.senderPhone));
+      }
+    });
+
+    const contactsFromHistory = Array.from(phoneSet).filter((phone) => phone !== currentPhone).map((phone) => {
+      const info = userByPhone.get(phone);
+      const latestMsg = chatMessages
+        .filter((msg) =>
+          (msg.senderPhone === currentPhone && msg.receiverPhone === phone) ||
+          (msg.senderPhone === phone && msg.receiverPhone === currentPhone)
+        )
+        .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+      return {
+        phone,
+        name: String(info?.name || `Liên hệ ${phone}`),
+        role: String(info?.role || 'user').toUpperCase(),
+        avatar: `https://i.pravatar.cc/100?u=${phone}`,
+        preview: latestMsg?.text || 'Bắt đầu cuộc trò chuyện',
+        lastTimestamp: Number(latestMsg?.timestamp || 0)
+      };
+    });
+
+    if (contactsFromHistory.length > 0) {
+      return contactsFromHistory.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+    }
+
+    const businessSuggestions = usersForChat
+      .filter((user: any) => String(user?.phone || '') !== currentPhone && String(user?.role || '').toLowerCase() === 'business')
+      .slice(0, 3);
+
+    const fallbackPool = usersForChat.filter((user: any) => String(user?.phone || '') !== currentPhone);
+    const fallbackSuggestions = [...businessSuggestions];
+
+    for (const user of fallbackPool) {
+      if (fallbackSuggestions.length >= 3) break;
+      const exists = fallbackSuggestions.some((item: any) => String(item?.phone || '') === String(user?.phone || ''));
+      if (!exists) fallbackSuggestions.push(user);
+    }
+
+    return fallbackSuggestions.map((user: any) => {
+      const phone = String(user?.phone || '');
+      return {
+        phone,
+        name: String(user?.name || `Liên hệ ${phone}`),
+        role: String(user?.role || 'user').toUpperCase(),
+        avatar: `https://i.pravatar.cc/100?u=${phone}`,
+        preview: 'Bắt đầu cuộc trò chuyện',
+        lastTimestamp: 0
+      };
+    });
+  })();
+
+  useEffect(() => {
+    if (!currentUser) {
+      setActiveChat(null);
+      return;
+    }
+    if (!Array.isArray(chatContacts) || chatContacts.length === 0) {
+      setActiveChat(null);
+      return;
+    }
+    const stillExists = activeChat && chatContacts.some((contact) => contact.phone === activeChat.phone);
+    if (!stillExists) {
+      setActiveChat(chatContacts[0]);
+    }
+  }, [currentUser, chatContacts, activeChat]);
+
+  const activeConversationMessages: ChatMessage[] = (() => {
+    if (!currentUser?.phone || !activeChat?.phone) return [];
+    return chatMessages
+      .filter((msg) =>
+        (msg.senderPhone === currentUser.phone && msg.receiverPhone === activeChat.phone) ||
+        (msg.senderPhone === activeChat.phone && msg.receiverPhone === currentUser.phone)
+      )
+      .sort((a, b) => a.timestamp - b.timestamp);
+  })();
+
+  const incomingChatCount = currentUser?.phone
+    ? chatMessages.filter((msg) => msg.receiverPhone === currentUser.phone).length
+    : 0;
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
     setSearchQuery(q);
@@ -1981,10 +2077,21 @@ export default function BmeStationeryApp() {
 
   const handleSendFloatingMessage = () => {
     const message = floatingChatInput.trim();
-    if (!message) return;
-    const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setFloatingMessages((prev) => [...prev, { id: Date.now(), chatId: activeChat, text: message, from: 'me', time }]);
+    if (!message || !currentUser?.phone || !activeChat?.phone) return;
+    const newMessage: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      senderPhone: String(currentUser.phone),
+      receiverPhone: String(activeChat.phone),
+      text: message,
+      timestamp: Date.now()
+    };
+    const nextMessages = [...chatMessages, newMessage];
+    setChatMessages(nextMessages);
+    try {
+      localStorage.setItem('chatMessages', JSON.stringify(nextMessages));
+    } catch (error) {
+      console.error('Không thể lưu chatMessages xuống localStorage:', error);
+    }
     setFloatingChatInput('');
   };
 
@@ -2172,16 +2279,18 @@ export default function BmeStationeryApp() {
                 <Camera size={20} />
               </button>
 
-              <button
-                onClick={() => setIsChatBoxOpen(!isChatBoxOpen)}
-                className="relative bg-white hover:bg-blue-100 text-gray-600 rounded-full p-2 transition-colors"
-                title="Tin nhắn nhanh"
-              >
-                <MessageCircle size={20} />
-                {unreadMsgCount > 0 && (
-                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
-                )}
-              </button>
+              {currentUser && (
+                <button
+                  onClick={() => setIsChatBoxOpen(!isChatBoxOpen)}
+                  className="relative bg-white hover:bg-blue-100 text-gray-600 rounded-full p-2 transition-colors"
+                  title="Tin nhắn nhanh"
+                >
+                  <MessageCircle size={20} />
+                  {incomingChatCount > 0 && (
+                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+                  )}
+                </button>
+              )}
 
               {/* NOTIFICATION POPUP */}
               <div className="relative">
@@ -2552,7 +2661,7 @@ export default function BmeStationeryApp() {
         </div>
       )}
 
-      {isChatBoxOpen && (
+      {currentUser && isChatBoxOpen && (
         <div className="fixed bottom-6 right-6 w-[700px] h-[550px] z-50 rounded-2xl shadow-2xl flex flex-row overflow-hidden border border-gray-200 bg-white">
           <aside className="w-[35%] border-r border-gray-200 bg-gray-50 flex flex-col">
             <div className="px-4 py-4 border-b border-gray-200 bg-white">
@@ -2560,29 +2669,34 @@ export default function BmeStationeryApp() {
               <p className="text-xs text-gray-500 mt-1">Trao đổi nhanh với đối tác và kỹ sư</p>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-2">
-              {chatContacts.map((contact) => (
-                <button
-                  key={contact.id}
-                  onClick={() => setActiveChat(contact.id)}
-                  className={`w-full text-left p-3 rounded-xl transition-all border ${
-                    activeChat === contact.id
-                      ? 'bg-blue-100 border-l-4 border-blue-600 border-blue-200 shadow-sm'
-                      : 'bg-white border-gray-200 hover:bg-blue-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <img src={contact.avatar} alt={contact.name} className="w-11 h-11 rounded-full object-cover border border-gray-200" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-bold text-sm text-gray-800 truncate">{contact.name}</p>
-                        {contact.unread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white font-bold">{contact.unread}</span>}
+              {chatContacts.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-center px-4">
+                  <p className="text-sm text-gray-500">Chưa có liên hệ phù hợp để trò chuyện.</p>
+                </div>
+              ) : (
+                chatContacts.map((contact) => (
+                  <button
+                    key={contact.phone}
+                    onClick={() => setActiveChat(contact)}
+                    className={`w-full text-left p-3 rounded-xl transition-all border ${
+                      activeChat?.phone === contact.phone
+                        ? 'bg-blue-100 border-l-4 border-blue-600 border-blue-200 shadow-sm'
+                        : 'bg-white border-gray-200 hover:bg-blue-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <img src={contact.avatar} alt={contact.name} className="w-11 h-11 rounded-full object-cover border border-gray-200" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-bold text-sm text-gray-800 truncate">{contact.name}</p>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mt-0.5">{contact.role}</p>
+                        <p className="text-xs text-gray-600 truncate mt-1">{contact.preview}</p>
                       </div>
-                      <p className="text-xs text-gray-500 truncate mt-0.5">{contact.role}</p>
-                      <p className="text-xs text-gray-600 truncate mt-1">{contact.preview}</p>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))
+              )}
             </div>
           </aside>
 
@@ -2590,13 +2704,13 @@ export default function BmeStationeryApp() {
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
               <div className="flex items-center gap-3">
                 <img
-                  src={chatContacts.find((contact) => contact.id === activeChat)?.avatar || 'https://i.pravatar.cc/100?u=fallback_chat'}
-                  alt={chatContacts.find((contact) => contact.id === activeChat)?.name || 'Đoạn chat'}
+                  src={activeChat?.avatar || 'https://i.pravatar.cc/100?u=fallback_chat'}
+                  alt={activeChat?.name || 'Đoạn chat'}
                   className="w-10 h-10 rounded-full object-cover border border-gray-200"
                 />
                 <div>
-                  <p className="font-bold text-gray-800">{chatContacts.find((contact) => contact.id === activeChat)?.name || 'Đoạn chat'}</p>
-                  <p className="text-xs text-gray-500">{chatContacts.find((contact) => contact.id === activeChat)?.role || 'Hỗ trợ nhanh'}</p>
+                  <p className="font-bold text-gray-800">{activeChat?.name || 'Đoạn chat'}</p>
+                  <p className="text-xs text-gray-500">{activeChat?.role || 'Hỗ trợ nhanh'}</p>
                 </div>
               </div>
               <button
@@ -2609,20 +2723,35 @@ export default function BmeStationeryApp() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
-              {floatingMessages.filter((msg) => msg.chatId === activeChat).map((msg) => (
-                <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[78%] px-4 py-2.5 text-sm shadow-sm ${
-                      msg.from === 'me'
-                        ? 'bg-blue-600 text-white rounded-bl-3xl rounded-tl-3xl rounded-tr-3xl'
-                        : 'bg-gray-200 text-gray-800 rounded-br-3xl rounded-tr-3xl rounded-tl-3xl'
-                    }`}
-                  >
-                    <p className="leading-relaxed">{msg.text}</p>
-                    <p className={`text-[10px] mt-1 ${msg.from === 'me' ? 'text-blue-100' : 'text-gray-500'}`}>{msg.time}</p>
-                  </div>
+              {!activeChat ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-sm text-gray-500">Hãy chọn một đoạn chat để bắt đầu</p>
                 </div>
-              ))}
+              ) : activeConversationMessages.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-sm text-gray-500">Chưa có tin nhắn. Hãy gửi tin nhắn đầu tiên.</p>
+                </div>
+              ) : (
+                activeConversationMessages.map((msg) => {
+                  const isMine = msg.senderPhone === currentUser.phone;
+                  return (
+                    <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[78%] px-4 py-2.5 text-sm shadow-sm ${
+                          isMine
+                            ? 'bg-blue-600 text-white rounded-bl-3xl rounded-tl-3xl rounded-tr-3xl'
+                            : 'bg-gray-200 text-gray-800 rounded-br-3xl rounded-tr-3xl rounded-tl-3xl'
+                        }`}
+                      >
+                        <p className="leading-relaxed">{msg.text}</p>
+                        <p className={`text-[10px] mt-1 ${isMine ? 'text-blue-100' : 'text-gray-500'}`}>
+                          {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="p-3 border-t border-gray-200 bg-white flex items-center gap-2">
@@ -2635,12 +2764,14 @@ export default function BmeStationeryApp() {
                     handleSendFloatingMessage();
                   }
                 }}
-                placeholder="Nhập tin nhắn..."
-                className="flex-1 border border-gray-300 rounded-full px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                placeholder={activeChat ? 'Nhập tin nhắn...' : 'Chọn đoạn chat để bắt đầu'}
+                disabled={!activeChat}
+                className="flex-1 border border-gray-300 rounded-full px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
               />
               <button
                 onClick={handleSendFloatingMessage}
-                className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition shadow-sm"
+                disabled={!activeChat}
+                className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
                 title="Gửi tin nhắn"
               >
                 <Send size={16} />
