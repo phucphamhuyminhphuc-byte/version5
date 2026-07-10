@@ -994,13 +994,51 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
     const [stores, setStores] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
     const [activeAnalytics, setActiveAnalytics] = useState<string | null>(null);
+    const [activeSupervisorTab, setActiveSupervisorTab] = useState<'ANALYTICS' | 'ORDER_MONITORING'>('ANALYTICS');
+
+    const normalizePhone = (value: any) => String(value || '').replace(/\D/g, '');
+    const maskPhone = (value: any) => {
+      const digits = normalizePhone(value);
+      if (!digits) return 'Ẩn danh';
+      if (digits.length <= 6) return `${digits.slice(0, 2)}****`;
+      return `${digits.slice(0, 2)}****${digits.slice(-3)}`;
+    };
+
+    const formatMonitoringTime = (value: any) => {
+      if (!value) return 'N/A';
+      const parsedDate = new Date(value);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        return parsedDate.toLocaleString('vi-VN');
+      }
+      return String(value);
+    };
+
+    const getArrayFromLocalStorage = (keys: string[]) => {
+      for (const key of keys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          // Keep trying fallback keys if localStorage content is malformed.
+        }
+      }
+      return [];
+    };
 
     useEffect(() => {
-      setUsers(safeGet('bme_users', []));
-      setPosts(safeGet('bme_posts', []));
-      setComms(safeGet('bme_communities', []));
-      setStores(safeGet('bme_stores', []));
-      setOrders(safeGet('bme_orders', []));
+      const syncSupervisorData = () => {
+        setUsers(getArrayFromLocalStorage(['bme_users', 'users']));
+        setPosts(getArrayFromLocalStorage(['bme_posts', 'posts']));
+        setComms(getArrayFromLocalStorage(['bme_communities', 'communities']));
+        setStores(getArrayFromLocalStorage(['bme_stores', 'stores']));
+        setOrders(getArrayFromLocalStorage(['bme_orders', 'orders']));
+      };
+
+      syncSupervisorData();
+      const interval = setInterval(syncSupervisorData, 3000);
+      return () => clearInterval(interval);
     }, []);
 
     const handleDeletePost = (id: string) => {
@@ -1056,11 +1094,54 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
     const engineerActiveCount = users.filter((u: any) => String(u?.role || '').toUpperCase() === 'BUSINESS' && ['ENGINEER', 'TECHNICIAN'].includes(String(u?.businessType || '').toUpperCase()) && String(u?.status || '').toLowerCase() === 'active').length;
     const totalBusinessActive = merchantActiveCount + engineerActiveCount;
 
+    const monitoredOrders = orders
+      .filter((order: any) => {
+        const status = String(order?.status || '').toUpperCase();
+        return status === 'SHIPPED' || status === 'CONFIRMED';
+      })
+      .map((order: any) => {
+        const storeName = stores?.find((store: any) => store?.id === order?.storeId)?.name || order?.storeName || 'Không xác định';
+        const matchedBuyer = users?.find((user: any) => normalizePhone(user?.phone) === normalizePhone(order?.buyerPhone));
+        const customerLabel = matchedBuyer?.name || maskPhone(order?.buyerPhone);
+        const itemsSummary = Array.isArray(order?.items) && order.items.length > 0
+          ? order.items
+            .map((item: any) => `${item?.name || item?.productName || 'Sản phẩm'} x${Number(item?.qty ?? item?.quantity ?? 1)}`)
+            .join(', ')
+          : `${order?.productName || 'Sản phẩm'} x${Number(order?.quantity ?? 1)}`;
+        const confirmedTime = formatMonitoringTime(order?.confirmedAt || order?.updatedAt || order?.timestamp);
+
+        return {
+          id: order?.id,
+          itemsSummary,
+          storeName,
+          customerLabel,
+          confirmedTime,
+          sortValue: Date.parse(order?.confirmedAt || order?.updatedAt || order?.timestamp || '') || 0
+        };
+      })
+      .sort((a: any, b: any) => b.sortValue - a.sortValue);
+
     return (
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6 space-y-6">
         <h3 className="text-xl font-bold text-indigo-600 mb-4 flex items-center gap-2"><Shield size={24}/> Giám Sát Hệ Thống Tối Cao</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="flex flex-wrap gap-2 p-1 rounded-xl bg-gray-100 w-fit">
+          <button
+            onClick={() => setActiveSupervisorTab('ANALYTICS')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeSupervisorTab === 'ANALYTICS' ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            Phân tích hệ thống
+          </button>
+          <button
+            onClick={() => setActiveSupervisorTab('ORDER_MONITORING')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeSupervisorTab === 'ORDER_MONITORING' ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            Kiểm soát Đơn hàng
+          </button>
+        </div>
+
+        {activeSupervisorTab === 'ANALYTICS' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div
             onClick={() => setActiveAnalytics('GROUPS')}
             className={`bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'GROUPS' ? 'ring-2 ring-blue-500' : ''}`}
@@ -1093,9 +1174,9 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
             <p className="text-3xl font-black text-emerald-700 mt-2">{totalBusinessActive}</p>
             <p className="text-xs text-emerald-600 mt-1">Merchant: {merchantActiveCount} • Engineer: {engineerActiveCount}</p>
           </div>
-        </div>
+            </div>
 
-        {activeAnalytics !== null && (
+            {activeAnalytics !== null && (
           <div className="bg-white p-6 rounded-xl shadow-inner mt-6 border border-gray-200">
             <div className="flex items-center justify-between mb-5">
               <h4 className="font-bold text-gray-800 text-lg">Bảng phân tích chi tiết</h4>
@@ -1178,6 +1259,45 @@ const HomeDashboard = ({ setCurrentTab, setViewingStoreId, currentUser, userRole
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+            )}
+          </>
+        )}
+
+        {activeSupervisorTab === 'ORDER_MONITORING' && (
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <h4 className="font-bold text-gray-800">Bảng kiểm soát giao dịch đã xác nhận</h4>
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">{monitoredOrders.length} đơn</span>
+            </div>
+            {monitoredOrders.length === 0 ? (
+              <p className="text-sm text-gray-500 py-6 text-center border border-dashed border-gray-300 rounded-lg">Chưa có đơn hàng nào được xác nhận gần đây</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-gray-100 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 font-bold text-gray-700">Mã HĐ</th>
+                      <th className="px-4 py-3 font-bold text-gray-700">Tên Sản phẩm &amp; Số lượng</th>
+                      <th className="px-4 py-3 font-bold text-gray-700">Cửa hàng bán</th>
+                      <th className="px-4 py-3 font-bold text-gray-700">Khách hàng</th>
+                      <th className="px-4 py-3 font-bold text-gray-700">Thời gian xác nhận</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monitoredOrders.map((order: any) => (
+                      <tr key={order?.id} className="border-b border-gray-100 even:bg-gray-50 hover:bg-indigo-50/40 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-gray-700">{String(order?.id || 'N/A').slice(0, 8)}</td>
+                        <td className="px-4 py-3 text-gray-700">{order?.itemsSummary}</td>
+                        <td className="px-4 py-3 text-gray-700">{order?.storeName}</td>
+                        <td className="px-4 py-3 text-gray-700">{order?.customerLabel}</td>
+                        <td className="px-4 py-3 text-gray-700">{order?.confirmedTime}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

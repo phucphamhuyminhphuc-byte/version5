@@ -1922,7 +1922,24 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
   const [changeRequests, setChangeRequests] = useState(()=> safeGet('adminChangeRequests', safeGet('bme_admin_change_requests', [])));
   const [adminNotifs, setAdminNotifs] = useState(()=> safeGet('adminNotifications', safeGet('bme_admin_notifications', [])));
   const [supportMessages, setSupportMessages] = useState(()=> safeGet('bme_support_messages', []));
+  const [stores, setStores] = useState(()=> safeGet('bme_stores', safeGet('stores', [])));
+  const [orders, setOrders] = useState(()=> safeGet('bme_orders', safeGet('orders', [])));
   const [activeAnalytics, setActiveAnalytics] = useState<string | null>(null);
+  const [supervisorView, setSupervisorView] = useState<'ANALYTICS' | 'TRANSACTIONS'>('ANALYTICS');
+
+  const normalizePhone = (value: any) => String(value || '').replace(/\D/g, '');
+  const maskPhone = (value: any) => {
+    const digits = normalizePhone(value);
+    if (!digits) return 'Ẩn danh';
+    if (digits.length <= 6) return `${digits.slice(0, 2)}****`;
+    return `${digits.slice(0, 2)}****${digits.slice(-3)}`;
+  };
+  const formatMonitoringTime = (value: any) => {
+    if (!value) return 'N/A';
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString('vi-VN');
+    return String(value);
+  };
 
   useEffect(() => {
     const fetchAdminData = () => {
@@ -1933,6 +1950,8 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
       setChangeRequests(safeGet('adminChangeRequests', safeGet('bme_admin_change_requests', [])));
       setAdminNotifs(safeGet('adminNotifications', safeGet('bme_admin_notifications', [])));
       setSupportMessages(safeGet('bme_support_messages', []));
+      setStores(safeGet('bme_stores', safeGet('stores', [])));
+      setOrders(safeGet('bme_orders', safeGet('orders', [])));
     };
     const interval = setInterval(fetchAdminData, 3000);
     return () => clearInterval(interval);
@@ -2003,6 +2022,35 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
     }))
     .sort((a, b) => b.members - a.members)
     .slice(0, 5);
+
+  const storesArray = Array.isArray(stores) ? stores : [];
+  const ordersArray = Array.isArray(orders) ? orders : [];
+  const monitoredOrders = ordersArray
+    .filter((order: any) => {
+      const status = String(order?.status || '').toUpperCase();
+      return status === 'SHIPPED' || status === 'CONFIRMED';
+    })
+    .map((order: any) => {
+      const storeName = storesArray?.find((store: any) => store?.id === order?.storeId)?.name || order?.storeName || 'Không xác định';
+      const matchedBuyer = usersArray?.find((user: any) => normalizePhone(user?.phone) === normalizePhone(order?.buyerPhone));
+      const customerLabel = matchedBuyer?.name || maskPhone(order?.buyerPhone);
+      const itemsSummary = Array.isArray(order?.items) && order.items.length > 0
+        ? order.items
+          .map((item: any) => `${item?.name || item?.productName || 'Sản phẩm'} x${Number(item?.qty ?? item?.quantity ?? 1)}`)
+          .join(', ')
+        : `${order?.productName || 'Sản phẩm'} x${Number(order?.quantity ?? 1)}`;
+      const confirmedTime = formatMonitoringTime(order?.confirmedAt || order?.updatedAt || order?.timestamp);
+
+      return {
+        id: order?.id,
+        itemsSummary,
+        storeName,
+        customerLabel,
+        confirmedTime,
+        sortValue: Date.parse(order?.confirmedAt || order?.updatedAt || order?.timestamp || '') || 0
+      };
+    })
+    .sort((a: any, b: any) => b.sortValue - a.sortValue);
 
   // =========================================================
   // ADMIN DASHBOARD - Tập trung hỗ trợ người dùng + mật khẩu
@@ -2137,6 +2185,23 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
             <h4 className="font-bold text-indigo-800 text-lg flex items-center gap-2"><Shield size={22}/> Công Cụ Kiểm Tra Chéo Toàn Sàn — Thanh tra & Bảo vệ hệ thống</h4>
             <p className="text-indigo-600 text-sm mt-1">Supervisor có quyền xóa tối cao: xóa bài vi phạm, giải tán nhóm, xóa tài khoản vi phạm khỏi hệ thống.</p>
           </div>
+          <div className="flex flex-wrap gap-2 p-1 rounded-xl bg-gray-100 w-fit">
+            <button
+              onClick={() => setSupervisorView('ANALYTICS')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition ${supervisorView === 'ANALYTICS' ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              Phân tích hệ thống
+            </button>
+            <button
+              onClick={() => setSupervisorView('TRANSACTIONS')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition ${supervisorView === 'TRANSACTIONS' ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              Kiểm soát Đơn hàng
+            </button>
+          </div>
+
+          {supervisorView === 'ANALYTICS' && (
+            <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div onClick={() => setActiveAnalytics('GROUPS')} className={`bg-white rounded-2xl p-5 border border-indigo-100 shadow-sm cursor-pointer hover:scale-105 transition-all hover:shadow-lg ${activeAnalytics === 'GROUPS' ? 'ring-2 ring-blue-500' : ''}`}>
               <p className="text-xs font-bold text-indigo-600 uppercase">Nhóm cộng đồng</p>
@@ -2286,6 +2351,45 @@ export const AdminDashboard = ({ currentUser }: { currentUser: any }) => {
               </div>
             </div>
           </div>
+            </>
+          )}
+
+          {supervisorView === 'TRANSACTIONS' && (
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <h4 className="font-bold text-gray-800">Bảng kiểm soát giao dịch đã xác nhận</h4>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">{monitoredOrders.length} đơn</span>
+              </div>
+              {monitoredOrders.length === 0 ? (
+                <p className="text-sm text-gray-500 py-6 text-center border border-dashed border-gray-300 rounded-lg">Chưa có đơn hàng nào được xác nhận gần đây</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="bg-gray-100 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 font-bold text-gray-700">Mã HĐ</th>
+                        <th className="px-4 py-3 font-bold text-gray-700">Tên Sản phẩm &amp; Số lượng</th>
+                        <th className="px-4 py-3 font-bold text-gray-700">Cửa hàng bán</th>
+                        <th className="px-4 py-3 font-bold text-gray-700">Khách hàng</th>
+                        <th className="px-4 py-3 font-bold text-gray-700">Thời gian xác nhận</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monitoredOrders.map((order: any) => (
+                        <tr key={order?.id} className="border-b border-gray-100 even:bg-gray-50 hover:bg-indigo-50/40 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-gray-700">{String(order?.id || 'N/A').slice(0, 8)}</td>
+                          <td className="px-4 py-3 text-gray-700">{order?.itemsSummary}</td>
+                          <td className="px-4 py-3 text-gray-700">{order?.storeName}</td>
+                          <td className="px-4 py-3 text-gray-700">{order?.customerLabel}</td>
+                          <td className="px-4 py-3 text-gray-700">{order?.confirmedTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
