@@ -1323,10 +1323,13 @@ export const StoreProfile = ({ currentUser, viewingStoreId, setViewingStoreId, m
 
     const nextProducts = products.map((p: any) => {
       if (p?.storeId !== myStore?.id) return p;
-      const itemFromArray = Array.isArray(order?.items) ? order.items.find((it: any) => it?.id === p?.id) : null;
+      const productId = String(p?.id || '');
+      const itemFromArray = Array.isArray(order?.items)
+        ? order.items.find((it: any) => String(it?.productId || it?.id || '') === productId)
+        : null;
       const deductQty = itemFromArray?.qty != null
         ? Number(itemFromArray?.qty || 0)
-        : (order?.productId === p?.id ? Number(order?.quantity || 0) : 0);
+        : (String(order?.productId || order?.id || '') === productId ? Number(order?.quantity || 0) : 0);
       if (!deductQty || deductQty <= 0) return p;
       return {
         ...p,

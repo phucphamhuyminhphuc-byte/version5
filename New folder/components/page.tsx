@@ -19,8 +19,6 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<'user'|'business'|'coordinator'|'supervisor'|'admin'>('user');
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [mounted, setMounted] = useState(false);
   
   // States for Community Corridor
@@ -45,6 +43,7 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
 
   const [usersData, setUsersData] = useState<any[]>([]);
   const [expandedComments, setExpandedComments] = useState<any>({});
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = () => {
@@ -56,6 +55,55 @@ const CommunityFeedCorridor = ({ currentUser, searchQuery }: { currentUser: any,
     const int = setInterval(fetchData, 3000);
     return () => clearInterval(int);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setSavedPostIds([]);
+      return;
+    }
+    const saved = safeGet(`bme_saved_posts_${currentUser.id}`, []);
+    setSavedPostIds(Array.isArray(saved) ? saved : []);
+  }, [currentUser?.id]);
+
+  const toggleSave = (postId: string) => {
+    if (!currentUser?.id) {
+      showToast('Vui lòng đăng nhập để lưu bài viết', 'error');
+      return;
+    }
+    const key = `bme_saved_posts_${currentUser.id}`;
+    setSavedPostIds((prev) => {
+      const exists = prev.includes(postId);
+      const next = exists ? prev.filter((id) => id !== postId) : [postId, ...prev];
+      safeSet(key, next);
+      showToast(exists ? 'Đã bỏ lưu bài viết' : 'Đã lưu bài viết', 'success');
+      return next;
+    });
+  };
+
+  const addComment = (postId: string, text: string) => {
+    const commentText = String(text || '').trim();
+    if (!commentText || !currentUser) return;
+
+    const reply = {
+      id: `r_${Date.now()}`,
+      author: currentUser.name || 'Người dùng',
+      authorPhone: currentUser.phone || '',
+      text: commentText,
+      time: new Date().toLocaleString()
+    };
+
+    const nextPosts = (Array.isArray(posts) ? posts : []).map((p: any) => {
+      if (String(p.id) !== String(postId)) return p;
+      return {
+        ...p,
+        replies: [...(Array.isArray(p.replies) ? p.replies : []), reply],
+        comments: Number(p.comments || 0) + 1
+      };
+    });
+
+    setPosts(nextPosts);
+    safeSet('bme_posts', nextPosts);
+  };
 
   const handleCreateCommunity = () => {
     if (!currentUser) return showToast('Vui lòng đăng nhập để tạo nhóm', 'error');
@@ -519,6 +567,21 @@ export default function BmeStationeryApp() {
   const cartRef = useRef<HTMLDivElement>(null);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState({ linhKien: [] as any[], thietBi: [] as any[], files: [] as any[] });
+  const normalizeRoleForState = (value: any): 'user' | 'business' | 'coordinator' | 'supervisor' | 'admin' => {
+    const role = String(value || 'user').toLowerCase();
+    if (role === 'admin' || role === 'supervisor' || role === 'coordinator' || role === 'business' || role === 'user') {
+      return role as 'user' | 'business' | 'coordinator' | 'supervisor' | 'admin';
+    }
+    return 'user';
+  };
+  const getDefaultTabByRole = (user: any) => {
+    const role = String(user?.role || '').toUpperCase();
+    const businessType = String(user?.businessType || '').toUpperCase();
+    if (role === 'ADMIN') return 'ADMIN';
+    if (role === 'SUPERVISOR') return 'ADMIN';
+    if (role === 'BUSINESS' && businessType === 'MERCHANT') return 'STORE';
+    return 'FEED';
+  };
 
   // ==========================================
   // KHỞI TẠO HỆ THỐNG AN TOÀN TRONG USEEFFECT
@@ -656,9 +719,11 @@ export default function BmeStationeryApp() {
           return;
         }
         
-        setIsLoggedIn(true); 
-        setUserRole(latestUser ? latestUser.role : cur.role); 
-        setCurrentUser(latestUser || cur);
+        const resolvedUser = latestUser || cur;
+        setIsLoggedIn(true);
+        setUserRole(normalizeRoleForState(resolvedUser?.role || 'user'));
+        setCurrentUser(resolvedUser);
+        setCurrentTab(getDefaultTabByRole(resolvedUser));
         if (latestUser) {
           safeSet('bme_users', users.map((u:any) => u.id === cur.id ? {...u, isOnline: true, lastActive: Date.now()} : u));
         }
@@ -683,6 +748,7 @@ export default function BmeStationeryApp() {
   // Navigation Items
   const navItems = [
     { id: 'FEED', icon: <LayoutGrid size={20} />, label: 'Bảng tin', badge: null },
+    { id: 'COMMUNITY', icon: <Users size={20} />, label: 'Cộng đồng', badge: null },
     { id: 'EMERGENCY', icon: <MapPin size={20} />, label: 'Khẩn cấp', badge: '🚨' },
     { id: 'MESSAGES', icon: <MessageSquare size={20} />, label: 'Tin nhắn', badge: unreadMsgCount > 0 ? unreadMsgCount : null },
     { id: 'STORE', icon: <Store size={20} />, label: 'Gian hàng', badge: null },
@@ -745,18 +811,46 @@ export default function BmeStationeryApp() {
 
     let stores = safeGet('bme_stores', []);
     if (!Array.isArray(stores)) stores = [];
-    let success = true;
 
-    // VIỆC 1: Chỉ kiểm tra xem giỏ hàng còn đủ hàng để đặt không (KHÔNG TRỪ KHO TẠI BƯỚC NÀY)
+    // VIỆC 1: Kiểm tra tồn kho với chuẩn hóa ID + fallback schema id/productId và stock/quantity.
     if (Array.isArray(cartItems)) {
-      cartItems.forEach(item => {
-        const store = stores.find((s:any) => s.id === item.storeId);
-        const prod = store?.products?.find((p:any) => p.id === item.id);
-        if (!prod || prod.stock < item.qty) success = false;
-      });
-    }
+      const allProducts = stores.reduce((acc: any[], store: any) => {
+        const products = Array.isArray(store?.products) ? store.products : [];
+        products.forEach((product: any) => {
+          acc.push({ ...product, __storeId: String(store?.id || '') });
+        });
+        return acc;
+      }, []);
 
-    if(!success) return showToast('Lỗi: Một số sản phẩm không đủ tồn kho lúc này!', 'error');
+      for (const cartItem of cartItems) {
+        const targetId = String(cartItem?.productId || cartItem?.id || '');
+        const targetStoreId = String(cartItem?.storeId || '');
+        const productInDb = allProducts.find((p: any) => {
+          const sameId = String(p?.id || '') === targetId;
+          if (!sameId) return false;
+          if (!targetStoreId) return true;
+          return String(p?.__storeId || '') === targetStoreId;
+        });
+
+        if (!productInDb) {
+          alert(`Lỗi: Không tìm thấy sản phẩm có ID ${targetId} trong hệ thống!`);
+          return;
+        }
+
+        const availableQty = Number(productInDb?.stock ?? productInDb?.quantity ?? productInDb?.qty ?? 0);
+        const requestedQty = Number(cartItem?.quantity ?? cartItem?.qty ?? 0);
+
+        if (!Number.isFinite(availableQty) || !Number.isFinite(requestedQty) || requestedQty <= 0) {
+          alert('Lỗi: Dữ liệu số lượng không hợp lệ, vui lòng kiểm tra lại giỏ hàng!');
+          return;
+        }
+
+        if (availableQty < requestedQty) {
+          alert(`Lỗi: Sản phẩm ${productInDb?.name || targetId} chỉ còn ${availableQty} trong kho!`);
+          return;
+        }
+      }
+    }
     
     // VIỆC 2: Tạo Object đơn hàng hoàn chỉnh và Đẩy vào mảng orders
     const existingOrders = safeGet('bme_orders', []);
@@ -766,15 +860,17 @@ export default function BmeStationeryApp() {
     const newNotifs: any[] = [];
     
     const cartByStore = Array.isArray(cartItems) ? cartItems.reduce((acc: any, item) => {
-      if(!acc[item.storeId]) acc[item.storeId] = [];
-      acc[item.storeId].push(item);
+      const key = String(item?.storeId || '');
+      if (!key) return acc;
+      if(!acc[key]) acc[key] = [];
+      acc[key].push(item);
       return acc;
     }, {}) : {};
     
     const newOrders = Object.keys(cartByStore).map(storeId => {
       const storeItems = cartByStore[storeId];
-      const store = stores.find((s:any) => s.id === storeId);
-      const seller = users.find((u:any) => u.id === store?.ownerId);
+      const store = stores.find((s:any) => String(s?.id || '') === String(storeId));
+      const seller = users.find((u:any) => String(u?.id || '') === String(store?.ownerId || ''));
       
       const order = {
         id: `ORD_${Date.now().toString().slice(-6)}_${Math.floor(Math.random()*1000)}`,
@@ -892,7 +988,7 @@ export default function BmeStationeryApp() {
         if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('openStore', {detail: firstProd.storeId}));
       }, 200);
     } else if (searchResults.files.length > 0) {
-      setCurrentTab('COMMUNITY');
+      setCurrentTab('FEED');
     }
     setShowSearchDropdown(false);
   };
@@ -951,7 +1047,7 @@ export default function BmeStationeryApp() {
                   <h4 className="font-bold text-bme-primary mb-2 border-b pb-1">📄 Tài liệu kỹ thuật liên quan</h4>
                   <div className="grid gap-2">
                     {searchResults.files.map((f, i) => (
-                      <div key={i} className="flex justify-between items-center p-3 bg-gray-50 hover:bg-blue-50 rounded-lg cursor-pointer transition" onClick={() => { setShowSearchDropdown(false); setCurrentTab('COMMUNITY'); setTimeout(()=> {
+                      <div key={i} className="flex justify-between items-center p-3 bg-gray-50 hover:bg-blue-50 rounded-lg cursor-pointer transition" onClick={() => { setShowSearchDropdown(false); setCurrentTab('FEED'); setTimeout(()=> {
                         if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('openCommunity', {detail: f.communityId}));
                       }, 100); }}>
                         <p className="font-bold text-gray-800 flex-1">{f.title}</p>
@@ -1289,6 +1385,7 @@ export default function BmeStationeryApp() {
             <div className="mb-6 animate-slide-in-down">
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-800">
                 {currentTab === 'FEED' && '📋 Bảng tin'}
+                {currentTab === 'COMMUNITY' && '👥 Cộng đồng Y sinh'}
                 {currentTab === 'EMERGENCY' && '🚨 Tìm kiếm khẩn cấp'}
                 {currentTab === 'STORE' && '🏪 Gian hàng'}
                 {currentTab === 'ADMIN' && '⚙️ Dashboard quản trị'}
@@ -1296,7 +1393,8 @@ export default function BmeStationeryApp() {
                 {currentTab === 'MY_PROFILE' && '👤 Hồ sơ'}
               </h1>
               <p className="text-gray-600 mt-1">
-                {currentTab === 'FEED' && 'Khám phá bài viết mới, tin tức y sinh và cơ hội kinh doanh'}
+                {currentTab === 'FEED' && 'Khám phá bài viết mới, tin tức y sinh và kho tài liệu chuyên môn'}
+                {currentTab === 'COMMUNITY' && 'Tham gia hội nhóm kỹ thuật, trao đổi và chia sẻ tài liệu'}
                 {currentTab === 'EMERGENCY' && 'Tìm kỹ thuật viên & cửa hàng gần nhất để xử lý sự cố'}
                 {currentTab === 'MESSAGES' && 'Trò chuyện trực tiếp với Khách hàng và Doanh nghiệp'}
                 {currentTab === 'STORE' && 'Duyệt các cửa hàng và sản phẩm y tế'}
@@ -1311,6 +1409,8 @@ export default function BmeStationeryApp() {
               {(() => {
                 switch(currentTab) {
                   case 'FEED':
+                    return <HomeFeed searchQuery={searchQuery} currentUser={currentUser} />;
+                  case 'COMMUNITY':
                     return <CommunityFeedCorridor searchQuery={searchQuery} currentUser={currentUser} />;
                   case 'SAVED_POSTS': 
                     return <HomeFeed searchQuery={searchQuery} currentUser={currentUser} savedOnly={true} />;
@@ -1357,8 +1457,10 @@ export default function BmeStationeryApp() {
         onLogin={(user: any) => {
           setIsLoginOpen(false);
           setIsLoggedIn(true);
-          setUserRole(user.role || 'user');
+          setUserRole(normalizeRoleForState(user?.role || 'user'));
           setCurrentUser(user);
+          setCurrentTab(getDefaultTabByRole(user));
+
           try { localStorage.setItem('bme_current_user', JSON.stringify(user)); } catch (e) {}
         }}
       />

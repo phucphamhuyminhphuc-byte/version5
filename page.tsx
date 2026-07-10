@@ -481,6 +481,21 @@ export default function BmeStationeryApp() {
   const cartRef = useRef<HTMLDivElement>(null);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState({ linhKien: [] as any[], thietBi: [] as any[], files: [] as any[] });
+  const normalizeRoleForState = (value: any): 'user' | 'business' | 'coordinator' | 'supervisor' | 'admin' => {
+    const role = String(value || 'user').toLowerCase();
+    if (role === 'admin' || role === 'supervisor' || role === 'coordinator' || role === 'business' || role === 'user') {
+      return role as 'user' | 'business' | 'coordinator' | 'supervisor' | 'admin';
+    }
+    return 'user';
+  };
+  const getDefaultTabByRole = (user: any) => {
+    const role = String(user?.role || '').toUpperCase();
+    const businessType = String(user?.businessType || '').toUpperCase();
+    if (role === 'ADMIN') return 'ADMIN';
+    if (role === 'SUPERVISOR') return 'ADMIN';
+    if (role === 'BUSINESS' && businessType === 'MERCHANT') return 'STORE';
+    return 'FEED';
+  };
 
   // ==========================================
   // KHỞI TẠO HỆ THỐNG AN TOÀN TRONG USEEFFECT
@@ -618,9 +633,11 @@ export default function BmeStationeryApp() {
           return;
         }
         
-        setIsLoggedIn(true); 
-        setUserRole(latestUser ? latestUser.role : cur.role); 
-        setCurrentUser(latestUser || cur);
+        const resolvedUser = latestUser || cur;
+        setIsLoggedIn(true);
+        setUserRole(normalizeRoleForState(resolvedUser?.role || 'user'));
+        setCurrentUser(resolvedUser);
+        setCurrentTab(getDefaultTabByRole(resolvedUser));
         if (latestUser) {
           safeSet('bme_users', users.map((u:any) => u.id === cur.id ? {...u, isOnline: true, lastActive: Date.now()} : u));
         }
@@ -645,9 +662,10 @@ export default function BmeStationeryApp() {
   // Navigation Items
   const navItems = [
     { id: 'FEED', icon: <LayoutGrid size={20} />, label: 'Bảng tin', badge: null },
+    { id: 'COMMUNITY', icon: <Users size={20} />, label: 'Cộng đồng', badge: null },
     { id: 'EMERGENCY', icon: <MapPin size={20} />, label: 'Khẩn cấp', badge: '🚨' },
     { id: 'MESSAGES', icon: <MessageSquare size={20} />, label: 'Tin nhắn', badge: unreadMsgCount > 0 ? unreadMsgCount : null },
-    { id: 'store', icon: <Store size={20} />, label: 'Gian hàng' },
+    { id: 'STORE', icon: <Store size={20} />, label: 'Gian hàng' },
     { id: 'SAVED_POSTS', icon: <Bookmark size={20} />, label: 'Mục đã lưu', badge: null },
     ...(userRole === 'admin' ? [{ id: 'ADMIN', icon: <Settings size={20} />, label: 'Quản trị Admin', badge: pendingCommCount > 0 ? pendingCommCount : null }] : []),
     ...(['supervisor', 'coordinator'].includes(userRole) ? [{ id: 'ADMIN', icon: <Settings size={20} />, label: 'Bảng điều khiển Giám sát', badge: pendingCommCount > 0 ? pendingCommCount : null }] : []),
@@ -707,18 +725,35 @@ export default function BmeStationeryApp() {
 
     let stores = safeGet('bme_stores', []);
     if (!Array.isArray(stores)) stores = [];
-    let success = true;
 
-    // VIỆC 1: Chỉ kiểm tra xem giỏ hàng còn đủ hàng để đặt không (KHÔNG TRỪ KHO TẠI BƯỚC NÀY)
+    // VIỆC 1: Kiểm tra tồn kho với chuẩn hóa ID + ép kiểu Number để tránh mismatch dữ liệu.
     if (Array.isArray(cartItems)) {
-      cartItems.forEach(item => {
-        const store = stores.find((s:any) => s.id === item.storeId);
-        const prod = store?.products?.find((p:any) => p.id === item.id);
-        if (!prod || prod.stock < item.qty) success = false;
-      });
-    }
+      for (const cartItem of cartItems) {
+        const cartStoreId = String(cartItem?.storeId || '');
+        const store = stores.find((s: any) => String(s?.id || '') === cartStoreId);
+        const products = Array.isArray(store?.products) ? store.products : [];
+        const cartProductId = String(cartItem?.productId || cartItem?.id || '');
+        const productInDb = products.find((p: any) => String(p?.id || '') === cartProductId);
 
-    if(!success) return showToast('Lỗi: Một số sản phẩm không đủ tồn kho lúc này!', 'error');
+        if (!productInDb) {
+          alert(`Sản phẩm (ID: ${cartProductId}) không còn tồn tại trong kho!`);
+          return;
+        }
+
+        const stockValue = Number(productInDb?.stock ?? 0);
+        const cartQtyValue = Number(cartItem?.qty ?? cartItem?.quantity ?? 0);
+
+        if (Number.isNaN(stockValue) || Number.isNaN(cartQtyValue) || cartQtyValue <= 0) {
+          showToast('Dữ liệu số lượng không hợp lệ, vui lòng tải lại trang và thử lại.', 'error');
+          return;
+        }
+
+        if (stockValue < cartQtyValue) {
+          showToast(`Sản phẩm ${productInDb?.name || 'không xác định'} chỉ còn ${stockValue} chiếc trong kho!`, 'error');
+          return;
+        }
+      }
+    }
     
     // VIỆC 2: Tạo Object đơn hàng hoàn chỉnh và Đẩy vào mảng orders
     const existingOrders = safeGet('bme_orders', []);
@@ -728,15 +763,17 @@ export default function BmeStationeryApp() {
     const newNotifs: any[] = [];
     
     const cartByStore = Array.isArray(cartItems) ? cartItems.reduce((acc: any, item) => {
-      if(!acc[item.storeId]) acc[item.storeId] = [];
-      acc[item.storeId].push(item);
+      const key = String(item?.storeId || '');
+      if (!key) return acc;
+      if(!acc[key]) acc[key] = [];
+      acc[key].push(item);
       return acc;
     }, {}) : {};
     
     const newOrders = Object.keys(cartByStore).map(storeId => {
       const storeItems = cartByStore[storeId];
-      const store = stores.find((s:any) => s.id === storeId);
-      const seller = users.find((u:any) => u.id === store?.ownerId);
+      const store = stores.find((s:any) => String(s?.id || '') === String(storeId));
+      const seller = users.find((u:any) => String(u?.id || '') === String(store?.ownerId || ''));
       
       const order = {
         id: `ORD_${Date.now().toString().slice(-6)}_${Math.floor(Math.random()*1000)}`,
@@ -1251,6 +1288,7 @@ export default function BmeStationeryApp() {
             <div className="mb-6 animate-slide-in-down">
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-800">
                 {currentTab === 'FEED' && '📋 Bảng tin'}
+                {currentTab === 'COMMUNITY' && '👥 Cộng đồng Y sinh'}
                 {currentTab === 'EMERGENCY' && '🚨 Tìm kiếm khẩn cấp'}
                 {currentTab === 'STORE' && '🏪 Gian hàng'}
                 {currentTab === 'ADMIN' && '⚙️ Dashboard quản trị'}
@@ -1258,7 +1296,8 @@ export default function BmeStationeryApp() {
                 {currentTab === 'MY_PROFILE' && '👤 Hồ sơ'}
               </h1>
               <p className="text-gray-600 mt-1">
-                {currentTab === 'FEED' && 'Khám phá bài viết mới, tin tức y sinh và cơ hội kinh doanh'}
+                {currentTab === 'FEED' && 'Khám phá bài viết mới, tin tức y sinh và kho tài liệu chuyên môn'}
+                {currentTab === 'COMMUNITY' && 'Tham gia hội nhóm kỹ thuật, trao đổi và chia sẻ tài liệu'}
                 {currentTab === 'EMERGENCY' && 'Tìm kỹ thuật viên & cửa hàng gần nhất để xử lý sự cố'}
                 {currentTab === 'MESSAGES' && 'Trò chuyện trực tiếp với Khách hàng và Doanh nghiệp'}
                 {currentTab === 'STORE' && 'Duyệt các cửa hàng và sản phẩm y tế'}
@@ -1273,6 +1312,8 @@ export default function BmeStationeryApp() {
               {(() => {
                 switch(currentTab) {
                   case 'FEED':
+                    return <HomeFeed searchQuery={searchQuery} currentUser={currentUser} />;
+                  case 'COMMUNITY':
                     return <CommunityFeedCorridor searchQuery={searchQuery} currentUser={currentUser} />;
                   case 'SAVED_POSTS': 
                     return <HomeFeed searchQuery={searchQuery} currentUser={currentUser} savedOnly={true} />;
@@ -1319,8 +1360,9 @@ export default function BmeStationeryApp() {
         onLogin={(user: any) => {
           setIsLoginOpen(false);
           setIsLoggedIn(true);
-          setUserRole(user.role || 'user');
+          setUserRole(normalizeRoleForState(user?.role || 'user'));
           setCurrentUser(user);
+          setCurrentTab(getDefaultTabByRole(user));
           try { localStorage.setItem('bme_current_user', JSON.stringify(user)); } catch (e) {}
         }}
       />

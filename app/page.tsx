@@ -1625,6 +1625,30 @@ export default function BmeStationeryApp() {
 
   // 3. STATE GIỎ HÀNG, THÔNG BÁO & CHAT
   const [cartItems, setCartItems] = useState<any[]>([]);
+  const setCart = (nextCart: any[]) => setCartItems(nextCart);
+
+  const getCartStorageKey = (phone: any) => `cart_${String(phone || '').trim()}`;
+  const readUserCart = (user: any) => {
+    try {
+      const phone = String(user?.phone || '').trim();
+      if (!phone) return [];
+      const raw = localStorage.getItem(getCartStorageKey(phone));
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error('Không thể đọc giỏ hàng người dùng:', error);
+      return [];
+    }
+  };
+  const writeUserCart = (user: any, cart: any[]) => {
+    try {
+      const phone = String(user?.phone || '').trim();
+      if (!phone) return;
+      localStorage.setItem(getCartStorageKey(phone), JSON.stringify(Array.isArray(cart) ? cart : []));
+    } catch (error) {
+      console.error('Không thể lưu giỏ hàng người dùng:', error);
+    }
+  };
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartTab, setCartTab] = useState<'cart' | 'history'>('cart');
   const [myOrders, setMyOrders] = useState<any[]>([]);
@@ -1651,8 +1675,17 @@ export default function BmeStationeryApp() {
 
   const getDefaultTabByRole = (user: any) => {
     const role = String(user?.role || '').toUpperCase();
-    if (role === 'ADMIN') return 'ADMIN_DASHBOARD';
-    if (role === 'SUPERVISOR') return 'SUPERVISOR_DASHBOARD';
+    const businessType = String(user?.businessType || '').toUpperCase();
+
+    if (role === 'ADMIN') {
+      return 'ADMIN_DASHBOARD';
+    }
+    if (role === 'SUPERVISOR') {
+      return 'SUPERVISOR_DASHBOARD';
+    }
+    if (role === 'BUSINESS' && businessType === 'MERCHANT') {
+      return 'MERCHANT_PRIVATE_STORE';
+    }
     return 'HOME';
   };
 
@@ -1766,7 +1799,11 @@ export default function BmeStationeryApp() {
       window.addEventListener('bme-go-home', handleGoHomeEvent);
       
       const interval = setInterval(() => {
-        setCartItems(safeGet('bme_cart', []));
+        if (currentUser?.phone) {
+          setCart(readUserCart(currentUser));
+        } else {
+          setCart([]);
+        }
         
         // Tính toán số lượng mục đang chờ duyệt (Cộng đồng + Gian hàng) theo Real-time để gắn Badge đỏ
         const comms = safeGet('bme_communities', []);
@@ -1808,28 +1845,31 @@ export default function BmeStationeryApp() {
     } catch (e) {
       console.error('init error', e);
     }
-  }, [chatTarget]);
+  }, [chatTarget, currentUser?.phone]);
 
   const refreshUserState = () => {
     const cur = safeGet('bme_current_user', null);
-    if (cur) {
-      const users = safeGet('bme_users', []);
-      if (Array.isArray(users)) {
-        const latestUser = users.find((u:any) => u.id === cur.id);
-        
-        if (latestUser && latestUser.status === 'Banned') {
-          showToast('Tài khoản của bạn đã bị khóa do vi phạm tiêu chuẩn cộng đồng', 'error');
-          localStorage.removeItem('bme_current_user');
-          return;
-        }
-        
-        setIsLoggedIn(true); 
-        setUserRole(normalizeRoleForState(latestUser ? latestUser.role : cur.role)); 
-        setCurrentUser(latestUser || cur);
-        if (latestUser) {
-          safeSet('bme_users', users.map((u:any) => u.id === cur.id ? {...u, isOnline: true, lastActive: Date.now()} : u));
-        }
-      }
+    if (!cur) return;
+
+    const users = safeGet('bme_users', []);
+    if (!Array.isArray(users)) return;
+
+    const latestUser = users.find((u: any) => u.id === cur.id);
+    if (latestUser && latestUser.status === 'Banned') {
+      showToast('Tài khoản của bạn đã bị khóa do vi phạm tiêu chuẩn cộng đồng', 'error');
+      localStorage.removeItem('bme_current_user');
+      return;
+    }
+
+    const resolvedUser = latestUser || cur;
+    setIsLoggedIn(true);
+    setUserRole(normalizeRoleForState(resolvedUser?.role || 'user'));
+    setCurrentUser(resolvedUser);
+    setCurrentTab(getDefaultTabByRole(resolvedUser));
+    setCart(readUserCart(resolvedUser));
+
+    if (latestUser) {
+      safeSet('bme_users', users.map((u: any) => u.id === cur.id ? { ...u, isOnline: true, lastActive: Date.now() } : u));
     }
   };
 
@@ -1875,7 +1915,7 @@ export default function BmeStationeryApp() {
     setUserRole('user');
     setCurrentTab('HOME');
     setIsMenuOpen(false);
-    setCartItems([]);
+    setCart([]);
     setNotifications([]);
     setChatTarget(null);
     setIsChatBoxOpen(false);
@@ -1890,7 +1930,12 @@ export default function BmeStationeryApp() {
   // XỬ LÝ CART & CHECKOUT
   // ==========================================
   const handleAddToCart = (product: any) => {
-    let cart = safeGet('bme_cart', []);
+    if (!currentUser?.phone) {
+      showToast('Vui lòng đăng nhập để thêm vào giỏ hàng', 'error');
+      return;
+    }
+
+    let cart = readUserCart(currentUser);
     if (!Array.isArray(cart)) cart = [];
     const exist = cart.find((i:any) => i.id === product.id);
     if(exist) {
@@ -1900,8 +1945,8 @@ export default function BmeStationeryApp() {
       if(product.stock < 1) return showToast('Sản phẩm đã hết hàng!', 'error');
       cart.push({...product, qty: 1});
     }
-    safeSet('bme_cart', cart);
-    setCartItems(cart);
+    writeUserCart(currentUser, cart);
+    setCart(cart);
     showToast('Đã thêm vào giỏ hàng', 'success');
   };
 
@@ -1915,58 +1960,121 @@ export default function BmeStationeryApp() {
 
   const processCheckout = () => {
     if(!checkoutForm.name.trim() || !checkoutForm.phone.trim() || !checkoutForm.address.trim()) {
-       return showToast('Vui lòng nhập đầy đủ thông tin giao hàng', 'error');
+      return showToast('Vui lòng nhập đầy đủ thông tin giao hàng', 'error');
     }
 
-    let stores = safeGet('bme_stores', []);
-    if (!Array.isArray(stores)) stores = [];
-    let success = true;
+    if (!currentUser?.phone) {
+      alert('Vui lòng đăng nhập lại để tiếp tục thanh toán!');
+      return;
+    }
 
-    // VIỆC 1: Chỉ kiểm tra xem giỏ hàng còn đủ hàng để đặt không (KHÔNG TRỪ KHO TẠI BƯỚC NÀY)
-    if (Array.isArray(cartItems)) {
-      cartItems.forEach(item => {
-        const store = stores.find((s:any) => s.id === item.storeId);
-        const prod = store?.products?.find((p:any) => p.id === item.id);
-        if (!prod || prod.stock < item.qty) success = false;
+    const freshProductsRaw = JSON.parse(localStorage.getItem('products') || '[]');
+    const freshStoresRaw = JSON.parse(localStorage.getItem('bme_stores') || localStorage.getItem('stores') || '[]');
+    const freshCartRaw = JSON.parse(localStorage.getItem(`cart_${currentUser.phone}`) || '[]');
+
+    const freshStores = Array.isArray(freshStoresRaw) ? freshStoresRaw : [];
+    const productsFromStores = freshStores.reduce((acc: any[], store: any) => {
+      const products = Array.isArray(store?.products) ? store.products : [];
+      products.forEach((product: any) => {
+        acc.push({ ...product, __storeId: String(store?.id || '') });
+      });
+      return acc;
+    }, []);
+    const freshProducts = Array.isArray(freshProductsRaw) && freshProductsRaw.length > 0 ? freshProductsRaw : productsFromStores;
+    const freshCart = Array.isArray(freshCartRaw) ? freshCartRaw : [];
+
+    if (freshCart.length === 0) {
+      alert('Giỏ hàng của bạn đang trống!');
+      setCart([]);
+      return;
+    }
+
+    const validCartItems: any[] = [];
+    const removedGhostItems: any[] = [];
+
+    for (const cartItem of freshCart) {
+      const targetId = String(cartItem?.productId || cartItem?.id || '');
+      const targetStoreId = String(cartItem?.storeId || '');
+      const productInDb = freshProducts.find((p: any) => {
+        if (String(p?.id || '') !== targetId) return false;
+        if (!targetStoreId) return true;
+        const productStoreId = String(p?.storeId || p?.__storeId || '');
+        return !productStoreId || productStoreId === targetStoreId;
+      });
+
+      if (!productInDb) {
+        removedGhostItems.push(cartItem);
+        continue;
+      }
+
+      const availableQty = Number(productInDb?.stock ?? productInDb?.quantity ?? productInDb?.qty ?? 0);
+      const requestedQty = Number(cartItem?.quantity ?? cartItem?.qty ?? 0);
+
+      if (!Number.isFinite(availableQty) || !Number.isFinite(requestedQty) || requestedQty <= 0) {
+        alert(`Lỗi dữ liệu số lượng ở sản phẩm ID ${targetId}. Vui lòng kiểm tra lại giỏ hàng!`);
+        return;
+      }
+
+      if (availableQty < requestedQty) {
+        alert(`Lỗi: Sản phẩm ${productInDb?.name || targetId} chỉ còn ${availableQty} trong kho!`);
+        return;
+      }
+
+      validCartItems.push({
+        ...cartItem,
+        id: cartItem?.id || targetId,
+        productId: targetId,
+        qty: requestedQty,
+        storeId: String(cartItem?.storeId || productInDb?.storeId || productInDb?.__storeId || ''),
+        price: Number(productInDb?.price ?? cartItem?.price ?? 0),
+        name: cartItem?.name || productInDb?.name || 'Sản phẩm'
       });
     }
 
-    if(!success) return showToast('Lỗi: Một số sản phẩm không đủ tồn kho lúc này!', 'error');
-    
-    // VIỆC 2: Tạo Object đơn hàng hoàn chỉnh và Đẩy vào mảng orders
+    if (removedGhostItems.length > 0) {
+      localStorage.setItem(`cart_${currentUser.phone}`, JSON.stringify(validCartItems));
+      setCart(validCartItems);
+      if (validCartItems.length === 0) {
+        alert('Một số sản phẩm trong giỏ đã bị xóa khỏi kho. Giỏ hàng hiện đã trống!');
+        return;
+      }
+      showToast(`Đã tự động loại bỏ ${removedGhostItems.length} sản phẩm không còn tồn tại khỏi giỏ hàng.`, 'info');
+    }
+
     const existingOrders = safeGet('bme_orders', []);
     const ordersArray = Array.isArray(existingOrders) ? existingOrders : [];
     let users = safeGet('bme_users', []);
     if (!Array.isArray(users)) users = [];
     const newNotifs: any[] = [];
-    
-    const cartByStore = Array.isArray(cartItems) ? cartItems.reduce((acc: any, item) => {
-      if(!acc[item.storeId]) acc[item.storeId] = [];
-      acc[item.storeId].push(item);
+
+    const cartByStore = validCartItems.reduce((acc: any, item: any) => {
+      const key = String(item?.storeId || '');
+      if (!key) return acc;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
       return acc;
-    }, {}) : {};
-    
+    }, {});
+
     const newOrders = Object.keys(cartByStore).map(storeId => {
       const storeItems = cartByStore[storeId];
-      const store = stores.find((s:any) => s.id === storeId);
-      const seller = users.find((u:any) => u.id === store?.ownerId);
-      
+      const store = freshStores.find((s: any) => String(s?.id || '') === String(storeId));
+      const seller = users.find((u:any) => String(u?.id || '') === String(store?.ownerId || ''));
+
       const order = {
         id: `ORD_${Date.now().toString().slice(-6)}_${Math.floor(Math.random()*1000)}`,
         buyerId: currentUser.id,
         buyerName: checkoutForm.name,
-        buyerPhone: currentUser.phone, // Bind chặt số điện thoại tài khoản
+        buyerPhone: currentUser.phone,
         shippingAddress: checkoutForm.address,
         storeId: storeId,
         storeName: store?.name || 'Gian hàng BME',
         sellerId: store?.ownerId,
         items: storeItems,
-        totalPrice: storeItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0),
+        totalPrice: storeItems.reduce((sum: number, item: any) => sum + (Number(item?.price || 0) * Number(item?.qty || 0)), 0),
         timestamp: new Date().toLocaleString(),
         status: 'Chờ xác nhận'
       };
 
-      // Bắn thông báo ngay lập tức cho chủ gian hàng (Business)
       if (seller) {
         newNotifs.push({
           id: Date.now() + Math.random(),
@@ -1975,21 +2083,18 @@ export default function BmeStationeryApp() {
           time: new Date().toLocaleString()
         });
       }
-      
+
       return order;
     });
     safeSet('bme_orders', [...newOrders, ...ordersArray]);
 
-    // Ghi nhận đơn hàng vào Log hệ thống cho Admin theo dõi
     const logs = safeGet('bme_audit_logs', []);
     const logsArray = Array.isArray(logs) ? logs : [];
-    const totalItems = Array.isArray(cartItems) ? cartItems.reduce((a,c)=>a+c.qty,0) : 0;
-    const totalPrice = Array.isArray(cartItems) ? cartItems.reduce((acc, item) => acc + (Number(item.price) * item.qty), 0) : 0;
-    
+    const totalItems = validCartItems.reduce((a: number, c: any) => a + Number(c?.qty || 0), 0);
+    const totalPrice = validCartItems.reduce((acc: number, item: any) => acc + (Number(item?.price || 0) * Number(item?.qty || 0)), 0);
     logsArray.unshift({ id: Date.now(), user: currentUser.name, role: currentUser.role, action: `Đã đặt mua ${totalItems} sản phẩm (Tổng: ${totalPrice.toLocaleString()}đ)`, time: new Date().toLocaleString() });
     safeSet('bme_audit_logs', logsArray);
 
-    // Bắn thông báo xác nhận thành công cho chính người mua (User)
     newNotifs.push({
       id: Date.now() + Math.random(),
       receiverPhone: currentUser.phone,
@@ -2000,12 +2105,12 @@ export default function BmeStationeryApp() {
     const existingNotifs = safeGet('bme_notifications', []);
     safeSet('bme_notifications', [...newNotifs, ...(Array.isArray(existingNotifs) ? existingNotifs : [])]);
 
-    // VIỆC 3: Xóa sạch Giỏ hàng sau khi đã lưu Đơn hàng an toàn
-    safeSet('bme_cart', []);
-    setCartItems([]);
+    localStorage.setItem(`cart_${currentUser.phone}`, JSON.stringify([]));
+    writeUserCart(currentUser, []);
+    setCart([]);
     setIsCheckoutModalOpen(false);
-    setCartTab('history'); // Tự động chuyển qua tab Lịch sử để User nhìn thấy đơn vừa đặt
-    
+    setCartTab('history');
+
     showToast('Đặt hàng thành công! Đơn hàng của bạn đã được chuyển tới nhà bán hàng', 'success');
     window.dispatchEvent(new CustomEvent('bme-refresh-stores'));
   };
@@ -2473,7 +2578,8 @@ export default function BmeStationeryApp() {
                                       <span className="text-xs font-bold bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">SL: {item.qty}</span>
                                       <button onClick={() => {
                                       const next = cartItems.filter(ci => ci.id !== item.id);
-                                      setCartItems(next); safeSet('bme_cart', next);
+                                      setCart(next);
+                                      writeUserCart(currentUser, next);
                                       }} className="text-red-500 text-xs hover:underline font-bold bg-red-50 px-2 py-1 rounded">Xóa</button>
                                     </div>
                                   </div>
@@ -2728,9 +2834,23 @@ export default function BmeStationeryApp() {
         onLogin={(user: any) => {
           setIsLoginOpen(false);
           setIsLoggedIn(true);
-          setUserRole(normalizeRoleForState(user.role || 'user'));
+          setUserRole(normalizeRoleForState(user?.role || 'user'));
           setCurrentUser(user);
-          setCurrentTab(getDefaultTabByRole(user));
+          const userCart = readUserCart(user);
+          setCart(userCart);
+
+          const role = String(user?.role || '').toUpperCase();
+          const businessType = String(user?.businessType || '').toUpperCase();
+          if (role === 'ADMIN') {
+            setCurrentTab('ADMIN_DASHBOARD');
+          } else if (role === 'SUPERVISOR') {
+            setCurrentTab('SUPERVISOR_DASHBOARD');
+          } else if (role === 'BUSINESS' && businessType === 'MERCHANT') {
+            setCurrentTab('MERCHANT_PRIVATE_STORE');
+          } else {
+            setCurrentTab('FEED');
+          }
+
           try { localStorage.setItem('bme_current_user', JSON.stringify(user)); } catch (e) {}
         }}
       />
